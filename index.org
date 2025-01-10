@@ -1,0 +1,24 @@
+#+TITLE: Martin Kristiansen's blog
+#+AUTHOR: Martin Kristiansen
+#+OPTIONS: toc:nil num:nil author:nil
+#+STARTUP: nofold
+
+
+* Subjects of interest
+
+This page is an example of what can be done with a simple editor and a lot of time.
+
+I have done work span accross:
+
+- Understanding Financial Markets
+- Algorithm Design and Optimization
+- Efficient Algorithm Implementation
+
+
+#+BEGIN_SRC clang
+  #include <stdio.h>
+  int main() {
+    printf("hello world\n");
+    return 0;
+  }
+#+END_SRC
