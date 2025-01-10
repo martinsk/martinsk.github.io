@@ -4,12 +4,10 @@
 #+STARTUP: nofold
 
 
-* Subjects of interest
 
 This page is an example of what can be done with a simple editor and a lot of time.
 
-I have done work span accross:
-
+* Areas of interest:
 - Understanding Financial Markets
 - Algorithm Design and Optimization
 - Efficient Algorithm Implementation
