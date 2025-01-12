@@ -1,0 +1,202 @@
+/*----------------------------------------------------------------------------*
+ * Used to modify the styles of org-mode HTML export.                         *
+ *----------------------------------------------------------------------------*/
+
+/* Font faces */
+
+@font-face {
+    font-family: 'Latin Modern';
+    font-style: normal;
+    font-weight: normal;
+    font-display: swap;
+    src: url('https://en.algorithmica.org/fonts/garamond.woff2');
+    /* src: url('../fonts/LM-regular.ttf') format('truetype'), */
+    /*      url('../fonts/LM-regular.woff2') format('woff2'), */
+    /*      url('../fonts/LM-regular.woff') format('woff'); */
+}
+
+@font-face {
+    font-family: 'Latin Modern';
+    font-style: italic;
+    font-weight: normal;
+    font-display: swap;
+    src: url('https://en.algorithmica.org/fonts/garamond.woff2');
+    /* src: url('../fonts/LM-italic.ttf') format('truetype'), */
+    /*      url('../fonts/LM-italic.woff2') format('woff2'), */
+    /*      url('../fonts/LM-italic.woff') format('woff'); */
+}
+
+@font-face {
+    font-family: 'Latin Modern';
+    font-style: normal;
+    font-weight: bold;
+    font-display: swap;
+    src: url('https://en.algorithmica.org/fonts/garamond.woff2');
+    /* src: url('../fonts/LM-bold.ttf') format('truetype'), */
+    /*      url('../fonts/LM-bold.woff2') format('woff2'), */
+    /*      url('../fonts/LM-bold.woff') format('woff'); */
+}
+
+@font-face {
+    font-family: 'Latin Modern';
+    font-style: italic;
+    font-weight: bold;
+    font-display: swap;
+    src: url('https://en.algorithmica.org/fonts/garamond.woff2');
+    /* src: url('../fonts/LM-bold-italic.ttf') format('truetype'), */
+    /*      url('../fonts/LM-bold-italic.woff2') format('woff2'), */
+    /*      url('../fonts/LM-bold-italic.woff') format('woff'); */
+}
+
+/*----------------------------------------------------------------------------*/
+
+
+body {
+    font-family: 'Latin Modern', Georgia, Cambria, 'Times New Roman', Times, serif;
+    text-rendering: optimizeLegibility;
+
+    margin-bottom: 4em;
+    background-color: #FEFFFD;
+    font-size: 110%;
+}
+
+#content {
+    max-width: 950px;
+}
+
+#org-div-home-and-up {
+    text-align: center;
+    font-size: 80%;
+    padding-bottom: 1em;
+    border-bottom: 1px solid #aaaaaa;
+}
+
+h1, h2, h3, h4 {
+    color: #333333;
+}
+
+hr {
+    border: none;
+    height: 1px;
+    color: #aaaaaa;
+    background-color: #aaaaaa;
+}
+
+/*----------------------------------------------------------------------------*/
+
+p {
+    text-align: justify;
+}
+
+p, li {
+    line-height: 1.4em;
+}
+
+dl.org-dl dd p:nth-child(1) {
+    margin-top: 0px;
+}
+
+dl.org-dl dd p:nth-last-child(1) {
+    margin-bottom: 0px;
+}
+
+#text-table-of-contents li {
+    line-height: 1.3em;
+}
+
+p sup, li sup {
+    line-height: 0.5em;
+}
+
+/*----------------------------------------------------------------------------*/
+
+pre.src {
+    background: #111111;
+    color: white;
+    border: 1px solid #000000;
+}
+
+pre.src::before {
+    background-color: inherit;
+    color: #888;
+}
+
+pre.src .linenr {
+    color: #999;
+    user-select: none;
+}
+
+pre.src-nasm::before { content: 'Assembler (NASM)'; }
+
+/*----------------------------------------------------------------------------*/
+
+code {
+    background-color: rgba(0, 0, 0, 0.10);
+    border-radius: 2px;
+    padding: 1px 3px;
+    line-height: normal;
+}
+
+/*----------------------------------------------------------------------------*/
+
+a {
+    color: #7C271F;
+    text-decoration-color: #7C271F;
+}
+
+a[href^='#'] {
+    text-decoration-style: dashed;
+}
+
+a:hover {
+    text-decoration-color: rgb(0, 70, 200);
+}
+
+/*----------------------------------------------------------------------------*/
+
+blockquote {
+    background: #F1F1F1;
+    border-left: 5px solid #ccc;
+    margin: 1.5em;
+    padding: 0.5em 1.5em;
+}
+
+/*----------------------------------------------------------------------------*/
+
+table {
+    border: solid 1px #dddddd;
+    border-collapse: collapse;
+    border-spacing: 0;
+    margin-top: 1.2em;
+    margin-bottom: 1.2em;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+table thead th {
+    background-color: #eeeeee;
+    border: solid 1px #cccccc;
+    padding-left: 10px;
+    padding-right: 10px;
+}
+
+table tbody td {
+    border: solid 1px #cccccc;
+}
+
+/*----------------------------------------------------------------------------*/
+
+img {
+    max-width: 100%;
+}
+
+.figure {
+    padding: 0em 1em;
+}
+
+/*----------------------------------------------------------------------------*/
+
+#footnotes {
+    margin-top: 2em;
+    border-top: 1px solid #222;
+}
