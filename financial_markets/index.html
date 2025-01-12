@@ -3,10 +3,10 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2025-01-11 Sat 15:43 -->
+<!-- 2025-01-11 Sat 15:51 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Martin's Stuff</title>
+<title>Financial Markets</title>
 <meta name="generator" content="Org Mode" />
 <style>
   #content { max-width: 60em; margin: auto; }
@@ -192,37 +192,147 @@
     { background-color: #ffff00; color: #000000; font-weight: bold; }
   .org-svg { }
 </style>
-<link rel="stylesheet" type="text/css" href="css/main.css" />
+<link rel="stylesheet" type="text/css" href="../css/main.css" />
+<script>
+  window.MathJax = {
+    tex: {
+      ams: {
+        multlineWidth: '85%'
+      },
+      tags: 'ams',
+      tagSide: 'right',
+      tagIndent: '.8em'
+    },
+    chtml: {
+      scale: 1.0,
+      displayAlign: 'center',
+      displayIndent: '0em'
+    },
+    svg: {
+      scale: 1.0,
+      displayAlign: 'center',
+      displayIndent: '0em'
+    },
+    output: {
+      font: 'mathjax-modern',
+      displayOverflow: 'overflow'
+    }
+  };
+</script>
+
+<script
+  id="MathJax-script"
+  async
+  src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+</script>
 </head>
 <body>
-<div id="content" class="content">
-<h1 class="title">Martin's Stuff</h1>
-<p>
-This page is an example of what can be done with a simple editor and a lot of time.
-</p>
+<div id="org-div-home-and-up">
+ <a accesskey="h" href="../index.html"> UP </a>
+ |
+ <a accesskey="H" href="../index.html"> HOME </a>
+</div><div id="content" class="content">
+<h1 class="title">Financial Markets</h1>
 
-<div id="outline-container-orgd0db778" class="outline-2">
-<h2 id="orgd0db778">Areas of interest:</h2>
-<div class="outline-text-2" id="text-orgd0db778">
+<div id="outline-container-orgd3bc3d9" class="outline-2">
+<h2 id="orgd3bc3d9">Fundamentals</h2>
+<div class="outline-text-2" id="text-orgd3bc3d9">
+</div>
+<div id="outline-container-org0fa5b14" class="outline-3">
+<h3 id="org0fa5b14">Ideas:</h3>
+<div class="outline-text-3" id="text-org0fa5b14">
 <ul class="org-ul">
-<li><a href="./financial_markets/index.html">Understanding Financial Markets</a></li>
-<li>Algorithm Design and Optimization</li>
-<li>Efficient Algorithm Implementation</li>
+<li>Kelly Criteria/Merton Share for sizeing bets</li>
 </ul>
 
-<div class="org-src-container">
-<pre class="src src-C"><span style="color: #c586c0;">#include</span> <span style="color: #ce9178;">&lt;stdio.h&gt;</span>
-<span style="color: #569cd6;">int</span> <span style="color: #dcdcaa;">main</span><span style="color: #d4d4d4; background-color: #1e1e1e;">()</span> <span style="color: #d4d4d4; background-color: #1e1e1e;">{</span>
-  <span style="color: #dcdcaa;">printf</span><span style="color: #d4d4d4; background-color: #1e1e1e;">(</span><span style="color: #ce9178;">"hello world\n"</span><span style="color: #d4d4d4; background-color: #1e1e1e;">)</span><span style="color: #d4d4d4; background-color: #1e1e1e;">;</span>
-  <span style="color: #569cd6;">return</span> <span style="color: #b5cea8;">0</span><span style="color: #d4d4d4; background-color: #1e1e1e;">;</span>
-<span style="color: #d4d4d4; background-color: #1e1e1e;">}</span>
-</pre>
+\begin{equation}
+   l = \frac{\mu}{\sigma^2} 
+\end{equation}
+
+
+<ul class="org-ul">
+<li>Use Markowitz to determine optimal portfolio composition.</li>
+</ul>
+
+\begin{equation}
+    r_{(1,2)} = x_1 r_1 + x_2 r_2  \\
+    \text{var}(r_{(1,2)}) = \text{var}({r_1}) x_1^2 + \text{var}({r_2}) x_2^2 + 2 x_1 x_2 \text{cov}(r_1, r_2)
+\end{equation}
+
+
+<p>
+In general this works for \(n\) risky assets with respective normally distributed returns \(r_i :  i \in (1..n)\):
+</p>
+\begin{align}
+    r_{(1..n)} &= \sum_{i \in (1..n)}{x_i r_i}  \\
+    \text{var}(r_{(1..n)}) &=  \sum_{(i,j) \in ((1..n), (1..n))} 2x_ix_j\text{cov}(r_i, r_j) \\
+    \sigma(r_{(1..n)}) &= \sqrt{ \sum_{(i,j) \in ((1..n), (1..n))} 2x_ix_j\text{cov}(r_i, r_j)}
+\end{align}
+
+
+<ul class="org-ul">
+<li>The above math generatlizes to log normal distributions:</li>
+</ul>
+\begin{align}
+    r_{(1..n)} &= \sum_{i \in (1..n)}{x_i r_i}  \\
+    \text{var}(r_{(1..n)}) &=  \sum_{(i,j) \in ((1..n), (1..n))} 2x_ix_j\text{cov}(r_i, r_j) \\
+    \sigma(r_{(1..n)}) &= \sqrt{ \sum_{(i,j) \in ((1..n), (1..n))} 2x_ix_j\text{cov}(r_i, r_j)}
+\end{align}
+
+
+
+<ul class="org-ul">
+<li>Using Target Prices and standard deviations of price movements to determine sizing</li>
+</ul>
+</div>
+</div>
+</div>
+
+
+<div id="outline-container-org1946b4d" class="outline-2">
+<h2 id="org1946b4d">Appendix</h2>
+<div class="outline-text-2" id="text-org1946b4d">
+</div>
+<div id="outline-container-org254027a" class="outline-3">
+<h3 id="org254027a">Papers</h3>
+<div class="outline-text-3" id="text-org254027a">
+<ul class="org-ul">
+<li>RE-Bench: Evaluating frontier AI R&amp;D capabilities of language model
+agents against human experts.  Explains how training AI agents yield
+very interesting performance relative to time spent. In particular
+it looks like human participants deliver exponential increases
+relative to time spent, while AI agents hit a performance wall and
+do not gain improving results as time spent
+increases.  <a href="https://arxiv.org/pdf/2411.15114">https://arxiv.org/pdf/2411.15114</a></li>
+
+<li>Portfolio Diversification and Supporting Financial
+Institutions(Harry Markowitz). Yale Class on Optimizing
+portfolio compositions to reduce risk exposure and hence optimizing
+risk return.  <a href="https://www.youtube.com/watch?v=_B_24GUWdSM">https://www.youtube.com/watch?v=_B_24GUWdSM</a></li>
+
+<li>The Kelly criterion: How to size bets.  A really nice
+interactive representation of the kelly Criterie for determining
+optimal bet sizes when considering a bet with positive expected
+outcome.  <a href="https://explore.paulbutler.org/bet/">https://explore.paulbutler.org/bet/</a></li>
+
+<li>Merton's portfolio Problem.  Explains how to use a
+statical approach similar to Kelly, but based on knowledge of the
+statistical distribution in a continuous form.
+ <a href="https://en.wikipedia.org/wiki/Merton%27s_portfolio_problem">https://en.wikipedia.org/wiki/Merton%27s_portfolio_problem</a></li>
+
+<li>Tactical Investment Algorithms(Marcos López de
+Prado).  [Not read] The idea of this paper is to construct a
+properbalistic model of the world, and test strategies against this
+model. We then test the real world against the model to determine if
+we expect our strategies to work.
+ <a href="https://caia.org/sites/default/files/tactical.pdf">https://caia.org/sites/default/files/tactical.pdf</a></li>
+</ul>
 </div>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
-<p class="date">Created: 2025-01-11 Sat 15:43</p>
+<p class="date">Created: 2025-01-11 Sat 15:51</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

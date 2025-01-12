@@ -1,22 +1,23 @@
-#+TITLE: Martin Kristiansen's blog
+#+TITLE: Martin's Stuff
 #+AUTHOR: Martin Kristiansen
 #+OPTIONS: toc:nil num:nil author:nil
+#+OPTIONS: tex:t
 #+STARTUP: nofold
-
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="css/main.css" />
 
 
 This page is an example of what can be done with a simple editor and a lot of time.
 
 * Areas of interest:
-- Understanding Financial Markets
+- [[file:./financial_markets/index.html][Understanding Financial Markets]]
 - Algorithm Design and Optimization
-- Efficient Algorithm Implementation
-
-
-#+BEGIN_SRC clang
+  - C Webserver
+    
+#+BEGIN_SRC C
   #include <stdio.h>
   int main() {
     printf("hello world\n");
     return 0;
   }
 #+END_SRC
+

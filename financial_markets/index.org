@@ -1,0 +1,81 @@
+#+TITLE: Financial Markets
+#+AUTHOR: Martin Kristiansen
+#+OPTIONS: toc:nil num:nil author:nil
+#+OPTIONS: tex:t
+#+STARTUP: nofold
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="../css/main.css" />
+#+HTML_LINK_UP: ../index.html
+#+HTML_LINK_HOME: ../index.html
+
+* Fundamentals
+
+** Ideas:
+
+- Kelly Criteria/Merton Share for sizeing bets
+  
+\begin{equation}
+   l = \frac{\mu}{\sigma^2} 
+\end{equation}
+
+
+- Use Markowitz to determine optimal portfolio composition.
+
+\begin{equation}
+    r_{(1,2)} = x_1 r_1 + x_2 r_2  \\
+    \text{var}(r_{(1,2)}) = \text{var}({r_1}) x_1^2 + \text{var}({r_2}) x_2^2 + 2 x_1 x_2 \text{cov}(r_1, r_2)
+\end{equation}
+
+
+  In general this works for $n$ risky assets with respective normally distributed returns $r_i :  i \in (1..n)$:
+\begin{align}
+    r_{(1..n)} &= \sum_{i \in (1..n)}{x_i r_i}  \\
+    \text{var}(r_{(1..n)}) &=  \sum_{(i,j) \in ((1..n), (1..n))} 2x_ix_j\text{cov}(r_i, r_j) \\
+    \sigma(r_{(1..n)}) &= \sqrt{ \sum_{(i,j) \in ((1..n), (1..n))} 2x_ix_j\text{cov}(r_i, r_j)}
+\end{align}
+
+
+-  The above math generatlizes to log normal distributions:
+\begin{align}
+    r_{(1..n)} &= \sum_{i \in (1..n)}{x_i r_i}  \\
+    \text{var}(r_{(1..n)}) &=  \sum_{(i,j) \in ((1..n), (1..n))} 2x_ix_j\text{cov}(r_i, r_j) \\
+    \sigma(r_{(1..n)}) &= \sqrt{ \sum_{(i,j) \in ((1..n), (1..n))} 2x_ix_j\text{cov}(r_i, r_j)}
+\end{align}
+
+  
+  
+- Using Target Prices and standard deviations of price movements to determine sizing
+
+
+* Appendix
+
+**  Papers
+-  RE-Bench: Evaluating frontier AI R&D capabilities of language model
+  agents against human experts.  Explains how training AI agents yield
+  very interesting performance relative to time spent. In particular
+  it looks like human participants deliver exponential increases
+  relative to time spent, while AI agents hit a performance wall and
+  do not gain improving results as time spent
+  increases.  [[https://arxiv.org/pdf/2411.15114]]
+  
+- Portfolio Diversification and Supporting Financial
+  Institutions(Harry Markowitz). Yale Class on Optimizing
+  portfolio compositions to reduce risk exposure and hence optimizing
+  risk return.  [[https://www.youtube.com/watch?v=_B_24GUWdSM]]
+
+- The Kelly criterion: How to size bets.  A really nice
+  interactive representation of the kelly Criterie for determining
+  optimal bet sizes when considering a bet with positive expected
+  outcome.  [[https://explore.paulbutler.org/bet/]]
+  
+- Merton's portfolio Problem.  Explains how to use a
+  statical approach similar to Kelly, but based on knowledge of the
+  statistical distribution in a continuous form.
+   [[https://en.wikipedia.org/wiki/Merton%27s_portfolio_problem]]
+
+- Tactical Investment Algorithms(Marcos López de
+  Prado).  [Not read] The idea of this paper is to construct a
+  properbalistic model of the world, and test strategies against this
+  model. We then test the real world against the model to determine if
+  we expect our strategies to work.
+   [[https://caia.org/sites/default/files/tactical.pdf]]
+

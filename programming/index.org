@@ -1,0 +1,105 @@
+#+TITLE: C Webserver 
+#+AUTHOR: Martin Kristiansen
+#+OPTIONS: toc:nil num:nil author:nil
+#+OPTIONS: tex:t
+#+STARTUP: nofold
+#+HTML_HEAD: <link rel="stylesheet" type="text/css" href="../css/main.css" />
+#+HTML_LINK_UP: ../index.html
+#+HTML_LINK_HOME: ../index.html
+
+* Writing a webserver in C
+
+
+The fundamentals of writting a webserver in C is the main receive loop:
+
+
+#+BEGIN_SRC C
+
+  int main(int argc, const char ** argv) {
+
+    // setup the server for listening
+    int httpfd = init_serverfd(8080);
+
+    struct pollfd fds[MAX_CLIENTS+1] = {0};
+
+    // add the serverfd to the list of fd's to listen to
+    fds[0] = (struct pollfd){.fd = httpfd, .events = POLLIN};
+    int nfds = 1;
+
+    while (running) {
+
+      // setup the file descriptor query
+      for (int i = 0; i != nfds; i++) {
+	fds[i].events = 0;
+	if (clients[i].out.len != 0){
+	  fds[i].events |= POLLOUT;
+	}
+	fds[i].events |= POLLIN;	
+	fds[i].revents = 0;
+      }
+
+      // Ask the OS for updates on the fd's
+      int n_ready_fds = poll(fds, nfds, -1);
+
+      // Go over the fd's and check if there are recieved events
+      for (int i = 0; i != nfds; i++) {
+
+	// check if there are updates on the serverfd
+	// if there are updates these are new clients
+	if (fds[i].fd == httpfd) {
+	  if (fds[i].revents & POLLIN) {
+
+	    // accept the new connection
+	    struct sockaddr_in cli;
+	    socklen_t len = sizeof(cli);
+	    int connfd = accept(httpfd, (struct sockaddr *)&cli, &len);
+
+	    if (connfd < 0) {
+	      fprintf(stderr, "FAILURE: recieved errorcode on accept call");
+	      fprintf(stderr, "Error message: %s\n", strerror(errno));
+	    } else {
+	      // initialize the client and add it to the list of fd's
+	      client_init(&clients[nfds]);
+	      fds[nfds++] = fd;
+	    }
+	  }
+	} else if (fds[i].revents & POLLHUP) {
+
+	  // if connection is showdown 
+	  shutdown(fds[i].fd, SHUT_RDWR);
+	  close(fds[i].fd);
+
+	  clients_cleanup(&fds, &clients, i);
+	  i--;
+	  nfds--;
+
+	} else if (fds[i].revents & POLLIN ) {
+	  ClientStatus status = CLOSE;
+	  status = client_handle_http_receive(fds[i].fd, ht, &clients[i]);
+
+	  if (status == CLOSE) {
+	    shutdown(fds[i].fd, SHUT_RDWR);
+	    close(fds[i].fd);
+
+	    clients_cleanup(&fds, &clients, i);
+	    i--;
+	    nfds--;
+	  }
+
+	} else if (fds[i].revents & POLLOUT) {
+	  ClientStatus status = client_output_flush(fds[i].fd, &clients[i], clients[i].keepalive);
+	  if (status == CLOSE) {
+	    shutdown(fds[i].fd, SHUT_RDWR);
+	    close(fds[i].fd);
+
+	    clients_cleanup(&fds, &clients, i);
+	    i--;
+	    nfds--;
+	  }
+	}
+      }
+    }
+    close(httpfd);
+    running = false;
+  }
+#+END_SRC
