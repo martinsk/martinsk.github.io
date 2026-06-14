@@ -1,202 +1,320 @@
 /*----------------------------------------------------------------------------*
- * Used to modify the styles of org-mode HTML export.                         *
+ * martinsk.github.io — editorial theme matching mskql.com                   *
+ * EB Garamond serif body · JetBrains Mono for code/labels                   *
  *----------------------------------------------------------------------------*/
 
-/* Font faces */
-
-@font-face {
-    font-family: 'Latin Modern';
-    font-style: normal;
-    font-weight: normal;
-    font-display: swap;
-    src: url('https://en.algorithmica.org/fonts/garamond.woff2');
-    /* src: url('../fonts/LM-regular.ttf') format('truetype'), */
-    /*      url('../fonts/LM-regular.woff2') format('woff2'), */
-    /*      url('../fonts/LM-regular.woff') format('woff'); */
+:root {
+    --bg:      #fffff8;
+    --fg:      #111111;
+    --fg-dim:  #555555;
+    --rule:    #cccccc;
+    --accent:  #a00000;
+    --code-bg: #f3f1eb;
+    --serif: 'EB Garamond', 'Palatino Linotype', Palatino, Georgia, serif;
+    --mono: 'JetBrains Mono', 'Menlo', 'Consolas', 'DejaVu Sans Mono', monospace;
 }
 
-@font-face {
-    font-family: 'Latin Modern';
-    font-style: italic;
-    font-weight: normal;
-    font-display: swap;
-    src: url('https://en.algorithmica.org/fonts/garamond.woff2');
-    /* src: url('../fonts/LM-italic.ttf') format('truetype'), */
-    /*      url('../fonts/LM-italic.woff2') format('woff2'), */
-    /*      url('../fonts/LM-italic.woff') format('woff'); */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 15px; -webkit-text-size-adjust: 100%; }
+
+body {
+    font-family: var(--serif);
+    font-size: 1.1rem;
+    line-height: 1.7;
+    color: var(--fg);
+    background: var(--bg);
+    width: 55%;
+    margin-left: auto;
+    margin-right: auto;
+    padding: 3rem 0 5rem;
 }
 
-@font-face {
-    font-family: 'Latin Modern';
-    font-style: normal;
-    font-weight: bold;
-    font-display: swap;
-    src: url('https://en.algorithmica.org/fonts/garamond.woff2');
-    /* src: url('../fonts/LM-bold.ttf') format('truetype'), */
-    /*      url('../fonts/LM-bold.woff2') format('woff2'), */
-    /*      url('../fonts/LM-bold.woff') format('woff'); */
-}
+/*----------------------------------------------------------------------------*
+ * Typography                                                                  *
+ *----------------------------------------------------------------------------*/
 
-@font-face {
-    font-family: 'Latin Modern';
-    font-style: italic;
-    font-weight: bold;
-    font-display: swap;
-    src: url('https://en.algorithmica.org/fonts/garamond.woff2');
-    /* src: url('../fonts/LM-bold-italic.ttf') format('truetype'), */
-    /*      url('../fonts/LM-bold-italic.woff2') format('woff2'), */
-    /*      url('../fonts/LM-bold-italic.woff') format('woff'); */
+p, ol, ul, dl { font-size: 1.1rem; line-height: 1.7; margin-bottom: 1.2rem; }
+li { margin-bottom: 0.3rem; }
+ol, ul { padding-left: 1.6rem; }
+
+a {
+    color: var(--fg);
+    text-decoration: none;
+    background-image: linear-gradient(var(--accent), var(--accent));
+    background-size: 1px 1px;
+    background-repeat: repeat-x;
+    background-position: 0 1.15em;
 }
+a:hover { color: var(--accent); }
+
+strong { font-weight: 600; }
 
 /*----------------------------------------------------------------------------*/
 
-
-body {
-    font-family: 'Latin Modern', Georgia, Cambria, 'Times New Roman', Times, serif;
-    text-rendering: optimizeLegibility;
-
-    margin-bottom: 4em;
-    background-color: #FEFFFD;
-    font-size: 110%;
+h1 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 2.6rem;
+    line-height: 1.15;
+    margin-bottom: 0.4rem;
+    font-variant: small-caps;
+    text-transform: lowercase;
+    letter-spacing: 0.06em;
 }
 
-#content {
-    max-width: 950px;
+.subtitle {
+    font-style: italic;
+    font-size: 1.3rem;
+    color: var(--fg-dim);
+    display: block;
+    margin-bottom: 0.6rem;
+    line-height: 1.4;
 }
 
-#org-div-home-and-up {
-    text-align: center;
-    font-size: 80%;
-    padding-bottom: 1em;
-    border-bottom: 1px solid #aaaaaa;
+.byline {
+    font-size: 0.95rem;
+    color: var(--fg-dim);
+    margin-bottom: 2rem;
 }
 
-h1, h2, h3, h4 {
-    color: #333333;
+h2 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-style: italic;
+    font-size: 1.6rem;
+    margin-top: 2.8rem;
+    margin-bottom: 0.6rem;
+    padding-bottom: 0.15rem;
+}
+
+h3 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-style: normal;
+    font-size: 1.15rem;
+    margin-top: 1.6rem;
+    margin-bottom: 0.4rem;
 }
 
 hr {
     border: none;
-    height: 1px;
-    color: #aaaaaa;
-    background-color: #aaaaaa;
+    border-top: 1px solid var(--rule);
+    margin: 2.5rem 0;
 }
+
+.title-rule {
+    border: none;
+    height: 3px;
+    background: var(--accent);
+    width: 60px;
+    margin: 0 0 2rem 0;
+}
+
+/*----------------------------------------------------------------------------*
+ * Navigation strip                                                            *
+ *----------------------------------------------------------------------------*/
+
+.toc-strip {
+    margin: 1.2rem 0 2rem 0;
+    padding: 0.5rem 0;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    font-size: 0.88rem;
+    line-height: 1.9;
+    color: var(--fg-dim);
+}
+.toc-strip a {
+    font-size: 0.88rem;
+    color: var(--fg-dim);
+    background-image: none;
+    white-space: nowrap;
+}
+.toc-strip a:hover { color: var(--accent); }
+.toc-strip a + a::before {
+    content: " · ";
+    color: var(--rule);
+}
+
+/*----------------------------------------------------------------------------*
+ * Landing-page project cards                                                  *
+ *----------------------------------------------------------------------------*/
+
+.project {
+    margin: 2rem 0;
+    border-left: 2px solid rgba(160, 0, 0, 0.35);
+    padding-left: 1.2rem;
+}
+
+.project-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.project-head h2 {
+    margin: 0;
+    font-style: normal;
+    font-weight: 600;
+    color: var(--accent);
+    font-size: 1.35rem;
+    letter-spacing: 0.02em;
+}
+
+.label { display: none; }
+
+.tagline {
+    margin: 0.3rem 0 0.6rem;
+    font-style: normal;
+    font-weight: 500;
+    color: var(--fg);
+    font-size: 1.05rem;
+}
+
+.project ul { margin: 0.5rem 0 0.75rem; }
+
+.project > p { margin-bottom: 0.6rem; }
+
+.links {
+    margin-top: 0.6rem;
+    font-size: 0.95rem;
+    color: var(--fg-dim);
+}
+.links a { margin-right: 1.25rem; white-space: nowrap; }
 
 /*----------------------------------------------------------------------------*/
 
-p {
-    text-align: justify;
+footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--rule);
+    font-size: 0.85rem;
+    color: var(--fg-dim);
 }
+footer a { margin-right: 1.25rem; }
 
-p, li {
-    line-height: 1.4em;
-}
-
-dl.org-dl dd p:nth-child(1) {
-    margin-top: 0px;
-}
-
-dl.org-dl dd p:nth-last-child(1) {
-    margin-bottom: 0px;
-}
-
-#text-table-of-contents li {
-    line-height: 1.3em;
-}
-
-p sup, li sup {
-    line-height: 0.5em;
-}
-
-/*----------------------------------------------------------------------------*/
-
-pre.src {
-    background: #111111;
-    color: white;
-    border: 1px solid #000000;
-}
-
-pre.src::before {
-    background-color: inherit;
-    color: #888;
-}
-
-pre.src .linenr {
-    color: #999;
-    user-select: none;
-}
-
-pre.src-nasm::before { content: 'Assembler (NASM)'; }
-
-/*----------------------------------------------------------------------------*/
+/*----------------------------------------------------------------------------*
+ * Inline code & pre blocks                                                    *
+ *----------------------------------------------------------------------------*/
 
 code {
-    background-color: rgba(0, 0, 0, 0.10);
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    background: var(--code-bg);
+    padding: 0.1em 0.35em;
     border-radius: 2px;
-    padding: 1px 3px;
-    line-height: normal;
 }
 
-/*----------------------------------------------------------------------------*/
-
-a {
-    color: #7C271F;
-    text-decoration-color: #7C271F;
+pre {
+    background: var(--code-bg);
+    border-left: 3px solid var(--accent);
+    padding: 1rem 1.2rem;
+    overflow-x: auto;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    margin: 1rem 0 1.4rem 0;
 }
+pre code { background: none; padding: 0; border-radius: 0; font-size: inherit; }
 
-a[href^='#'] {
-    text-decoration-style: dashed;
-}
+/*----------------------------------------------------------------------------*
+ * Tables                                                                      *
+ *----------------------------------------------------------------------------*/
 
-a:hover {
-    text-decoration-color: rgb(0, 70, 200);
+table {
+    border-collapse: collapse;
+    font-size: 0.95rem;
+    width: 100%;
+    margin: 1rem 0 1.4rem 0;
 }
+th, td {
+    padding: 0.4rem 0.8rem;
+    text-align: left;
+    border-bottom: 1px solid var(--rule);
+}
+thead th {
+    border-bottom: 2px solid var(--fg);
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+tbody tr:last-child td { border-bottom: 2px solid var(--fg); }
 
 /*----------------------------------------------------------------------------*/
 
 blockquote {
-    background: #F1F1F1;
-    border-left: 5px solid #ccc;
-    margin: 1.5em;
-    padding: 0.5em 1.5em;
+    font-style: italic;
+    font-size: 1.05rem;
+    line-height: 1.65;
+    margin: 1.5rem 0;
+    padding: 0 0 0 1.5rem;
+    border-left: 3px solid var(--accent);
+    color: var(--fg-dim);
 }
 
-/*----------------------------------------------------------------------------*/
+img { max-width: 100%; height: auto; }
 
-table {
-    border: solid 1px #dddddd;
-    border-collapse: collapse;
-    border-spacing: 0;
-    margin-top: 1.2em;
-    margin-bottom: 1.2em;
-    margin-left: auto;
-    margin-right: auto;
-}
-
-table thead th {
-    background-color: #eeeeee;
-    border: solid 1px #cccccc;
-    padding-left: 10px;
-    padding-right: 10px;
-}
-
-table tbody td {
-    border: solid 1px #cccccc;
-}
-
-/*----------------------------------------------------------------------------*/
-
-img {
+mjx-container[display="true"] {
+    overflow-x: auto;
+    overflow-y: hidden;
     max-width: 100%;
+    padding-bottom: 0.25rem;
 }
 
-.figure {
-    padding: 0em 1em;
+/*----------------------------------------------------------------------------*
+ * Org-mode export hooks (notes pages use inline styles, but keep these as    *
+ * a fallback in case any page links main.css directly)                       *
+ *----------------------------------------------------------------------------*/
+
+#org-div-home-and-up {
+    text-align: right;
+    font-size: 0.8rem;
+    padding-bottom: 1rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--rule);
 }
 
-/*----------------------------------------------------------------------------*/
+.title { font-size: 2rem; margin-bottom: 1.5rem; }
+.status, .date, .author, .creator, .validation { display: none; }
 
-#footnotes {
-    margin-top: 2em;
-    border-top: 1px solid #222;
+#table-of-contents { font-size: 0.9rem; }
+#table-of-contents h2 { font-size: 1rem; }
+
+.org-src-container { margin: 1.2rem 0; }
+
+pre.src, pre.example {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    border: none;
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    padding: 1rem 1.2rem;
+    overflow-x: auto;
+    font-size: 0.85rem;
+    line-height: 1.5;
 }
+pre.src code, pre.example code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: inherit;
+}
+pre.src::before { color: #888; background: inherit; }
+pre.src .linenr { color: #777; user-select: none; }
+
+#postamble, #footnotes {
+    margin-top: 2.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--rule);
+    font-size: 0.8rem;
+    color: var(--fg-dim);
+}
+
+/*----------------------------------------------------------------------------*
+ * Responsive                                                                  *
+ *----------------------------------------------------------------------------*/
+
+@media (max-width: 1100px) { body { width: 80%; } }
+@media (max-width: 700px)  { body { width: 90%; padding: 2rem 0 3rem; } h1 { font-size: 2rem; } }
+@media (max-width: 500px)  { body { width: 94%; } }
