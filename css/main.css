@@ -243,6 +243,17 @@ tbody tr:last-child td { border-bottom: 2px solid var(--fg); }
 
 /*----------------------------------------------------------------------------*/
 
+.tldr {
+    background: var(--code-bg);
+    border-left: 3px solid var(--accent);
+    padding: 1.1rem 1.4rem;
+    margin: 1.5rem 0 2.2rem;
+}
+.tldr p { margin-bottom: 0.6rem; }
+.tldr ul { margin: 0.4rem 0 0; }
+.tldr li { margin-bottom: 0.4rem; }
+.tldr p:last-child, .tldr ul:last-child { margin-bottom: 0; }
+
 blockquote {
     font-style: italic;
     font-size: 1.05rem;
