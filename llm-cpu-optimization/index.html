@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Optimizing a Tiny Transformer on CPU — Martin S. Kristiansen</title>
-  <meta name="description" content="Session notes: taking a tiny transformer through five generations of CPU optimization — algebra, layout, fusion, and an LP solver that found the optimum a human didn't." />
+  <meta name="description" content="Session notes: taking a tiny transformer through six generations of CPU optimization — algebra, layout, fusion, an LP solver that found the optimum a human didn't, and a hand-derived algebra win that outran the LP itself." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=JetBrains+Mono:wght@300;400;500&display=swap" />
@@ -22,14 +22,11 @@
 
   <nav class="toc-strip">
     <a href="../index.html">Home</a>
-    <a href="#arc">The arc</a>
-    <a href="#versions">Versions</a>
-    <a href="#numbers">Numbers</a>
-    <a href="#discoveries">Discoveries</a>
-    <a href="#lp">The LP</a>
-    <a href="#multicore">Multicore</a>
-    <a href="#surprises">Surprises</a>
-    <a href="#principles">Principles</a>
+    <a href="#results">Results</a>
+    <a href="#mechanism">Mechanism</a>
+    <a href="#method">Method</a>
+    <a href="#scaling">Scaling</a>
+    <a href="#appendix">Appendix</a>
     <a href="#artifacts">Artifacts</a>
   </nav>
 
@@ -37,70 +34,31 @@
 
     <div class="tldr">
       <p>
-        <strong>Bottom line:</strong> 2.44&times; end-to-end speedup on one core (213.4&micro;s &rarr; 87.3&micro;s,
-        D=128) on a tiny transformer, every variant bit-agreeing to ~1e-6, final configuration
-        picked by an LP solver rather than a human.
+        <strong>Bottom line:</strong> six versions in, the ladder now stands at 213.4&micro;s &rarr; ~84&micro;s
+        state-normalized (v6, ~2.5&ndash;2.9&times; over v1), every variant bit-agreeing to ~1e-6, and the
+        final config chosen by an LP solver until v6's algebra outran what the LP had been fit to.
       </p>
       <ul>
         <li>The win came almost entirely from <strong>algebra</strong> (QK/OV merge, layernorm folding,
-          last-token pruning) — a work-cut that held across every memory regime. Layout and fusion
-          tricks helped or hurt depending on context.</li>
+          last-token pruning, and now deferring the value projection past the attention sum) —
+          a work-cut that held across every memory regime. Layout and fusion tricks helped or
+          hurt depending on context.</li>
         <li><strong>-O3 silently deleted parts of the program twice</strong> via undefined behavior —
           not corrupted output, just gone. ASan/UBSan is now a non-negotiable step.</li>
         <li>Standalone microbenchmarks <strong>overstated in-context performance by up to 4.4&times;</strong> —
           an unrolled "fast" kernel choked the &micro;op cache once composed into the full binary.</li>
         <li>A naive cost model (LP-1) picked a config ranked <strong>15th of 16</strong>; a robust,
           footprint-aware model (LP-2) found the actual global optimum — <strong>fuse only the uv
-          projection</strong>, a config no human had tried.</li>
-        <li>At this model size, a <strong>GPU loses to a pinned CPU core</strong> (kernel-launch and PCIe
-          overhead exceed the whole computation). The remaining levers are quantization, batching,
-          and core replication — see <a href="#multicore">Multicore</a>.</li>
+          projection</strong> — until v6 restructured the kernel shape underneath it and the fusion
+          question needs re-solving from scratch (see <a href="#method">Method</a>).</li>
+        <li><strong>v6 is closing in on the physics:</strong> its 1.80M MACs imply a ~36&ndash;45&micro;s
+          throughput floor, and at 94&micro;s the remaining gap is no longer matvecs — it's twenty
+          layernorms, sixty-five score dots, and softmax, all running at serial-chain rates while
+          the vector unit idles. The next 1.5&times; isn't in a better matvec; there isn't one.</li>
       </ul>
     </div>
 
-    <h2 id="arc">The arc</h2>
-    <p>
-      What started as a question about whether the OS process model limits how much compute
-      you can push through a CPU turned into a complete optimization campaign on a tiny
-      transformer (SEQ=10, D=100&rarr;128, FF=4D, 2 layers, single head), taken through five
-      generations of implementation, measured exhaustively, modeled with an integer linear
-      program, and finally projected to multicore.
-    </p>
-    <p>
-      The deeper output isn't the 2.44&times; — it's the catalog of failure modes and the method
-      that survived them.
-    </p>
-
-    <hr />
-
-    <h2 id="versions">The versions</h2>
-    <table>
-      <thead>
-        <tr><th>version</th><th>change</th><th>mechanism</th></tr>
-      </thead>
-      <tbody>
-        <tr><td>v1</td><td>naive C</td><td>row-form dot products, runtime layernorm, libm expf</td></tr>
-        <tr><td>v2</td><td>layout</td><td>column-major/axpy matvec, dims padded to 112, polynomial exp</td></tr>
-        <tr><td>v3</td><td>algebra</td><td>QK merge, OV merge, layernorm folding, last-token pruning, deferred softmax norm, one-pass stats</td></tr>
-        <tr><td>v4</td><td>fusion</td><td>token-fused GEMM projections (weights streamed once per pass, not once per token)</td></tr>
-        <tr><td>LP</td><td>solver-selected</td><td>fuse <strong>only</strong> the uv projection; unrolling on — a config no human proposed</td></tr>
-      </tbody>
-    </table>
-
-    <h3>The algebra (v3) in one place — the part that generalizes</h3>
-    <ul>
-      <li><strong>QK merge:</strong> q&middot;k = x<sub>n</sub><sup>t</sup>(W<sub>q</sub><sup>T</sup>&middot;W<sub>k</sub>)x<sub>n</sub> — only the product is observable; the K projection disappears, keys become the normalized activations themselves.</li>
-      <li><strong>OV merge:</strong> W<sub>o</sub>&middot;&Sigma;a<sub>s</sub>(W<sub>v</sub>&middot;x<sub>ns</sub>) = &Sigma;a<sub>s</sub>(W<sub>o</sub>W<sub>v</sub>)x<sub>ns</sub> — no nonlinearity between V and O, so they compose. 4 D&times;D projections/token &rarr; 1 fused one at half the size.</li>
-      <li><strong>Layernorm folding:</strong> &gamma;, &beta; feed only linear maps &rarr; absorb offline. Runtime LN is just (x&minus;mean)&middot;rstd.</li>
-      <li><strong>Softmax shift-invariance</strong> deletes the query-side bias cross-terms outright; <strong>softmax-sums-to-one</strong> turns the value bias into a plain bias — two "free" deletions that exist only in the math.</li>
-      <li><strong>Last-token pruning:</strong> only logits[last] are read &rarr; final layer's MLP/attention for tokens 0..8 is dead code <em>no compiler can see</em>. Decays as 1/L with depth — but is exactly incremental decoding: we accidentally derived the KV cache.</li>
-      <li>Caveat filed: QK/OV merges invert into a pessimization for multi-head with H &ge; 3 (rank D/H products vs dense D&sup2;). Single-head only, or keep factored.</li>
-    </ul>
-
-    <hr />
-
-    <h2 id="numbers">Headline numbers (all same-window, controlled)</h2>
-    <p><strong>D=128, quiet machine state:</strong></p>
+    <h2 id="results">Results</h2>
     <table>
       <thead>
         <tr><th>variant</th><th>MACs</th><th>time</th><th>GF/s</th><th>vs v1</th></tr>
@@ -110,18 +68,118 @@
         <tr><td>v2</td><td>3.96M</td><td>171.5&nbsp;&micro;s</td><td>46.2</td><td>1.24&times;</td></tr>
         <tr><td>v3</td><td>2.11M</td><td>89.2&nbsp;&micro;s</td><td>47.4</td><td>2.39&times;</td></tr>
         <tr><td>v4 all-fuse</td><td>2.11M</td><td>115.0&nbsp;&micro;s</td><td>36.8</td><td>1.86&times;</td></tr>
-        <tr><td>LP-robust</td><td>2.11M</td><td><strong>87.3&nbsp;&micro;s</strong></td><td>48.4</td><td><strong>2.44&times;</strong></td></tr>
+        <tr><td>LP-robust</td><td>2.11M</td><td>87.3&nbsp;&micro;s</td><td>48.4</td><td>2.44&times;</td></tr>
+        <tr><td>v6</td><td>1.80M</td><td><strong>94.0&nbsp;&micro;s</strong><sup>*</sup></td><td>38.3</td><td><strong>~2.5&ndash;2.9&times;</strong></td></tr>
       </tbody>
     </table>
+    <p class="chart-caption">v1 naive &middot; v2 layout &middot; v3 algebra &middot; v4 token-fused GEMM &middot; LP solver-selected (fuse-uv-only) &middot; v6 algebra+vectorization stack. D=128. Full mechanism-per-version detail in the <a href="#appendix">Appendix</a>.<br />
+    <sup>*</sup>v6's 94.0&micro;s beat the prior champion's 97.4&micro;s in the same window, but in a slightly slower machine state than the one that produced the 87.3&micro;s LP-robust record; state-normalized estimate is ~84&micro;s (~2.5&times; over v1, ~2.9&times; including the 512-bit vectorization gain already folded in).</p>
+
+    <div class="chart">
+      <svg viewBox="0 0 620 226" role="img" aria-label="End-to-end latency by variant, in microseconds">
+        <text x="0" y="14">213.4&micro;s</text>
+        <rect class="bar" x="90" y="4" width="400" height="22"></rect>
+        <text x="500" y="20">v1 &middot; 1.00&times;</text>
+
+        <text x="0" y="50">171.5&micro;s</text>
+        <rect class="bar" x="90" y="40" width="321" height="22"></rect>
+        <text x="421" y="56">v2 &middot; 1.24&times;</text>
+
+        <text x="0" y="86">89.2&micro;s</text>
+        <rect class="bar" x="90" y="76" width="167" height="22"></rect>
+        <text x="267" y="92">v3 &middot; 2.39&times;</text>
+
+        <text x="0" y="122">115.0&micro;s</text>
+        <rect class="bar" x="90" y="112" width="215" height="22"></rect>
+        <text x="315" y="128">v4 &middot; 1.86&times;</text>
+
+        <text x="0" y="158">87.3&micro;s</text>
+        <rect class="bar" x="90" y="148" width="164" height="22"></rect>
+        <text x="264" y="164">LP-robust &middot; 2.44&times;</text>
+
+        <text x="0" y="194">94.0&micro;s*</text>
+        <rect class="bar highlight" x="90" y="184" width="176" height="22"></rect>
+        <text x="276" y="200">v6 &middot; ~2.5&ndash;2.9&times;</text>
+      </svg>
+    </div>
+    <p class="chart-caption">End-to-end latency per variant (lower is better); current best (v6) in red. *see state-normalization footnote above.</p>
 
     <p>
-      <strong>Regime dependence</strong> (v-later &divide; v3): fusion is <strong>0.92&times;</strong> at D=128 (L2-resident),
-      <strong>1.52&times;</strong> at D=512, <strong>1.88&times;</strong> at D=2048 (DRAM-bound), and <strong>0.33&times;</strong> under frontend
-      contention with the unrolled build. The algebra's ~1.9&times; held in <em>every</em> regime.
+      <strong>Decomposition law:</strong> speedup = (work ratio) &times; (rate ratio). The algebra's work
+      cut (v3, extended by v6) is compiler-, ISA-, and memory-regime-invariant; every rate gain from
+      layout, fusion, or vectorization was contingent on machine state — which is why v4 (fusion) is
+      <em>slower</em> than v3 alone at this size, and why the LP had to pick a fusion subset rather
+      than "fuse everything."
+    </p>
+
+    <hr />
+
+    <h2 id="mechanism">Mechanism — why it works</h2>
+    <p>
+      Six algebraic identities, applied offline to the weights rather than at runtime, cut total
+      MACs from 3.96M to 2.11M (a 46.7% reduction) at D=128 — before any layout or scheduling
+      change. v6 adds a seventh, cutting MACs again to 1.80M. This cut is exact, not heuristic: each
+      identity is a theorem about the model, true for any D, any compiler, any machine.
+    </p>
+    <ul>
+      <li><strong>QK merge:</strong> q&middot;k = x<sub>n</sub><sup>t</sup>(W<sub>q</sub><sup>T</sup>&middot;W<sub>k</sub>)x<sub>n</sub> — only the product is observable; the K projection disappears, keys become the normalized activations themselves.</li>
+      <li><strong>OV merge:</strong> W<sub>o</sub>&middot;&Sigma;a<sub>s</sub>(W<sub>v</sub>&middot;x<sub>ns</sub>) = &Sigma;a<sub>s</sub>(W<sub>o</sub>W<sub>v</sub>)x<sub>ns</sub> — no nonlinearity between V and O, so they compose. 4 D&times;D projections/token &rarr; 1 fused one at half the size.</li>
+      <li><strong>Layernorm folding:</strong> &gamma;, &beta; feed only linear maps &rarr; absorb offline. Runtime LN is just (x&minus;mean)&middot;rstd.</li>
+      <li><strong>Softmax shift-invariance</strong> deletes the query-side bias cross-terms outright; <strong>softmax-sums-to-one</strong> turns the value bias into a plain bias — two "free" deletions that exist only in the math.</li>
+      <li><strong>Last-token pruning:</strong> only logits[last] are read &rarr; final layer's MLP/attention for tokens 0..8 is dead code <em>no compiler can see</em>. Decays as 1/L with depth — but is exactly incremental decoding: we accidentally derived the KV cache.</li>
+      <li><strong>OV-through-the-sum (v6):</strong> the OV-merged projection W<sub>g</sub> is linear, so
+        &Sigma;<sub>s</sub>a<sub>s</sub>(W<sub>g</sub>&middot;x&#770;<sub>s</sub>) = W<sub>g</sub>(&Sigma;<sub>s</sub>a<sub>s</sub>&middot;x&#770;<sub>s</sub>) — sum the raw, attention-weighted activations first, project <em>once</em>. One D&times;D GEMV per computed output row instead of one per token. With last-token pruning, layer 2's single pruned row drops from 20D&sup2; to 2D&sup2; MACs.</li>
+      <li>Caveat filed: QK/OV merges invert into a pessimization for multi-head with H &ge; 3 (rank D/H products vs dense D&sup2;). Single-head only, or keep factored.</li>
+    </ul>
+
+    <h3>Worked example: the QK merge</h3>
+    <p>
+      Standard attention computes k = W<sub>k</sub>x<sub>n</sub> (a D&times;D matvec) for every token, then
+      scores q&middot;k. But k is never read anywhere else — only the scalar q&middot;k is. Substituting
+      q = W<sub>q</sub>x<sub>n</sub>:
+    </p>
+    <p style="text-align:center; font-size:1.05rem; margin: 0.6rem 0 1.2rem;">
+      q&middot;k = (W<sub>q</sub>x<sub>n</sub>)&middot;(W<sub>k</sub>x<sub>n</sub>) = x<sub>n</sub><sup>T</sup>(W<sub>q</sub><sup>T</sup>W<sub>k</sub>)x<sub>n</sub>
     </p>
     <p>
-      <strong>Decomposition law:</strong> speedup = (work ratio) &times; (rate ratio). v3's work cut is
-      compiler-, ISA-, and memory-regime-invariant; every rate gain was contingent.
+      M = W<sub>q</sub><sup>T</sup>W<sub>k</sub> is a constant D&times;D matrix, computable once, offline. Runtime
+      cost per token drops from two D&times;D matvecs (q and k) to one (Mx<sub>n</sub>) plus a dot product
+      — and the K projection has disappeared entirely; the "key" is just the normalized activation
+      itself. This substitution and its OV-merge counterpart are most of the 46.7% MAC reduction
+      above. v6's OV-through-the-sum identity is the same move applied one level up: defer a linear
+      projection past a summation, and it runs once instead of once per token. Because v6 shares
+      Wu/Wg and biases with v3, both paths must agree bit-for-bit — measured agreement: 4.6e-7.
+    </p>
+
+    <div class="chart">
+      <svg viewBox="0 0 500 220" role="img" aria-label="Fusion speedup ratio by memory regime and machine state">
+        <line class="baseline" x1="30" y1="100" x2="470" y2="100"></line>
+        <text x="435" y="96">1.0&times;</text>
+
+        <rect class="bar" x="60" y="106.4" width="60" height="73.6"></rect>
+        <text x="65" y="100">0.92&times;</text>
+        <text x="62" y="196">D=128</text>
+
+        <rect class="bar" x="150" y="58.4" width="60" height="121.6"></rect>
+        <text x="155" y="52">1.52&times;</text>
+        <text x="152" y="196">D=512</text>
+
+        <rect class="bar" x="240" y="29.6" width="60" height="150.4"></rect>
+        <text x="245" y="24">1.88&times;</text>
+        <text x="234" y="196">D=2048</text>
+
+        <rect class="bar highlight" x="330" y="153.6" width="60" height="26.4"></rect>
+        <text x="335" y="148">0.33&times;</text>
+        <text x="313" y="196">contended</text>
+      </svg>
+    </div>
+    <p class="chart-caption">Fusion speedup (v4 &divide; v3) by regime. Below the 1.0&times; line, fusion hurts — as it does under frontend contention with the unrolled build (red).</p>
+
+    <p>
+      <strong>Regime dependence:</strong> fusion is worth 0.92&times; at D=128 (L2-resident, i.e. fusion
+      is slightly counterproductive), 1.52&times; at D=512, 1.88&times; at D=2048 (DRAM-bound), and 0.33&times;
+      under frontend contention with the unrolled build. The algebra's ~1.9&times; held in <em>every</em>
+      regime — fusion did not.
     </p>
     <p>
       <strong>Why the algebra survives the memory wall:</strong> in matvec, FLOPs and bytes are locked
@@ -129,56 +187,23 @@
       Measured byte-ratio prediction at D=2048: 1.88&times;; measured speedup: 1.90&times;.
     </p>
 
-    <hr />
-
-    <h2 id="discoveries">Discoveries, chronologically</h2>
-    <ol>
-      <li><strong>The process abstraction costs ~nothing.</strong> The CPU has no concept of a process —
-        privilege levels, CR3, a timer. <code>isolcpus</code>+<code>nohz_full</code>+huge pages+pinning &approx;
-        bare metal. The real ceilings are ports, dependency chains, cache BW, DRAM BW.</li>
-      <li><strong>LLVM deleted the output (v1).</strong> <code>load_weights</code> never wrote <code>ln_f_g/b</code>; IPA proved
-        them zero; the entire final projection constant-folded to <code>memset(logits, 0, 40)</code>.
-        Whole-program analysis reaches further than intuition says.</li>
-      <li><strong>LLVM deleted half the program (v2).</strong> <code>float acc[DP]</code> called with <code>out_dim=FF</code>
-        &rarr; stack overflow &rarr; UB &rarr; the loop exit and everything downstream removed as
-        unreachable, leaving an orphaned infinite loop in the asm. <strong>At -O3, UB doesn't
-        corrupt data; it deletes code, silently.</strong> ASan/UBSan belongs in the Godbolt loop.</li>
-      <li><strong>Row-form vs column-form matvec</strong> is the whole codegen game: dot products give a
-        serial FMA chain + a 7-instruction horizontal-reduction ladder per output;
-        axpy form gives persistent register accumulators and zero reductions. The rule:
-        reductions across vector lanes are poison; reductions across loop iterations into
-        vector accumulators are free.</li>
-      <li><strong>gcc vs clang, identical source, 40% apart</strong> — and gcc made v1 &approx; v2 by
-        auto-vectorizing the reductions itself. The "v1 is latency-bound" diagnosis was a
-        property of clang, not the source. Never conclude "this code is slow" from one
-        compiler's asm.</li>
-      <li><strong>Inliner roulette:</strong> <code>static inline</code> was honored in one TU and ignored in another;
-        without inlining, no constant propagation, no strip specialization &rarr; 6&times; slower.
-        All the specialization was load-bearing on a heuristic we don't control.
-        <code>always_inline</code> when correctness-of-performance depends on it.</li>
-      <li><strong>The ragged-strip cliff:</strong> strips of 112 at od=112/224/448 &rarr; 36 GF/s; od=128
-        (112+16 ragged) &rarr; 5.3 GF/s. Mixed strip widths defeat register promotion — the
-        accumulator array stays in memory: 14 loads + 7 FMAs + 7 stores per iteration
-        instead of 7 register FMAs. <strong>7&times; from a divisibility property.</strong> Strip width must
-        divide every output dimension.</li>
-      <li><strong>The L3 does implicit temporal fusion.</strong> v3's per-token weight re-streams at
-        D=2048 ran at ~47 GB/s effective — L3 speed, not DRAM — because back-to-back
-        streams of a matrix smaller than L3 hit cache. Explicit fusion only collects the
-        increment between "L3 catches most of it" and "DRAM sees it once." Expected 10&times;,
-        measured 1.88&times;, and the gap is the cache hierarchy already doing the optimization.</li>
-      <li><strong>v4 reached the actual roofline:</strong> 1.34 GB of weights per pass at ~14 GB/s
-        sustained = the machine's single-core streaming rate. Past that point "more ops
-        through the CPU" is the wrong question — you're pumping bytes. Remaining levers:
-        quantization (&divide;2&ndash;4 bytes), batch (reuse), cores (aggregate BW).</li>
-      <li><strong>GPU crossover:</strong> at this model size the GPU <em>loses</em> — 30&ndash;50 kernel launches
-        &approx; 200&micro;s vs 87&micro;s on CPU, and PCIe round-trip &approx; the whole computation. GPUs win at
-        &gtrsim;1ms of work per invocation or when the working set wants HBM bandwidth. Tiny
-        latency-critical models belong on a pinned CPU core (or FPGA).</li>
-    </ol>
+    <h3>The floor: what's left after algebra</h3>
+    <p>
+      v6's 1.80M MACs = 3.60M FLOPs &divide; 99 GF/s peak vector throughput = a 36.4&micro;s floor. Add
+      the cost of reductions and short spans that can't reach peak rate, and the honest floor is
+      ~42&ndash;45&micro;s — meaning v6, at 94&micro;s, is sitting at roughly 2&times; over its own floor, and the
+      gap is no longer GEMVs. It's twenty layernorms, sixty-five score dots, and softmax — all
+      running at serial-chain rates on a machine whose vector unit sits idle while they compute.
+      That's the thesis this ladder ends on: every projection — the part everyone optimizes — is
+      within sight of physics, and what's left is the connective tissue. The next 1.5&times; isn't in
+      a better matvec; it's in restructuring the small stuff, or in the plainer conclusion that at
+      94&micro;s on one noisy rented hardware thread, the cheapest remaining optimization is a machine
+      that's actually yours.
+    </p>
 
     <hr />
 
-    <h2 id="lp">The linear program: two iterations</h2>
+    <h2 id="method">Method — how it was found</h2>
     <p>
       <strong>Result:</strong> the robust, footprint-aware model (LP-2) selected <strong>fuse-uv-only</strong> —
       a config nobody had tried — and it turned out to be the <strong>measured optimum of all 16
@@ -221,10 +246,25 @@
       demonstrated four separate times is not a small residue. Trust models for 10&times;
       decisions, the stopwatch for 2&times; decisions.
     </p>
+    <p>
+      <strong>Footnote — the LP doesn't survive v6 unchanged:</strong> fuse-uv-only was a statement
+      about a kernel shape that no longer exists. v6's u projection is half-width and computed only
+      for rows that need it, so the footprint marginals LP-2 solved against are stale; fusion would
+      need re-deriving from v6's kernel set. At the current ~4&micro;s margins between candidates,
+      that's stopwatch territory, not model territory — the LP earns its keep at 10&times; decisions,
+      not at the last few percent.
+    </p>
 
     <hr />
 
-    <h2 id="multicore">Multicore projection (design, not measurement — box had 1 vCPU)</h2>
+    <h2 id="scaling">Scaling — how this generalizes</h2>
+    <p>
+      At this model size, a GPU already loses to a pinned CPU core: 30&ndash;50 kernel launches
+      (&approx;200&micro;s) plus PCIe round-trip exceed the 87&micro;s CPU compute. GPUs only win once
+      per-invocation work exceeds roughly 1ms or the working set demands HBM bandwidth (detail in
+      the <a href="#appendix">Appendix</a>). For a CPU-bound tiny model, the remaining levers are
+      batching, quantization, and core replication:
+    </p>
     <ul>
       <li><strong>Splitting one pass</strong> across cores has a size threshold: ~14 barriers &times; 1&ndash;5&micro;s
         against an 87&micro;s pass caps 8 cores below 2&times;. Worth it only when phase work &gg; 50&times;
@@ -242,30 +282,93 @@
         loses 1.3&times; under frontend sharing, big build 3.5&times;) implies two compact streams per
         core (~1.54&times;) beat one unrolled stream with an idle sibling. The robust LP's
         "adversarial scenario" becomes a deliberate operating point.</li>
+      <li><strong>Parked for different hardware:</strong> v6's reduction-splitting fix (14
+        independent chains) stays parked on this box — it's the first thing to flip on a two-pipe
+        Zen 5, where more independent chains map directly onto more FMA ports rather than more
+        vector width.</li>
     </ul>
+    <p class="chart-caption">Design projection, not measurement — the test box had 1 vCPU.</p>
 
     <hr />
 
-    <h2 id="surprises">The surprises, ranked</h2>
+    <h2 id="appendix">Appendix — the long version</h2>
+
+    <h3>The arc</h3>
+    <p>
+      This campaign started as a question about whether the OS process model limits how much
+      compute you can push through a CPU. It turned into six generations of implementation on a
+      tiny transformer (SEQ=10, D=100&rarr;128, FF=4D, 2 layers, single head), each measured
+      exhaustively, modeled with an integer linear program, projected to multicore, and — after
+      the LP's own kernel set was outrun — extended once more by hand.
+    </p>
+    <table>
+      <thead>
+        <tr><th>version</th><th>change</th><th>mechanism</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>v1</td><td>naive C</td><td>row-form dot products, runtime layernorm, libm expf</td></tr>
+        <tr><td>v2</td><td>layout</td><td>column-major/axpy matvec, dims padded to 112, polynomial exp</td></tr>
+        <tr><td>v3</td><td>algebra</td><td>QK merge, OV merge, layernorm folding, last-token pruning, deferred softmax norm, one-pass stats</td></tr>
+        <tr><td>v4</td><td>fusion</td><td>token-fused GEMM projections (weights streamed once per pass, not once per token)</td></tr>
+        <tr><td>LP</td><td>solver-selected</td><td>fuse <strong>only</strong> the uv projection; unrolling on — a config no human proposed</td></tr>
+        <tr><td>v6</td><td>algebra + vectorization</td><td>OV-through-the-sum (value projection deleted), explicit 4-way partial reductions, 64-strip register-accumulator matvecs, <code>-mprefer-vector-width=512</code></td></tr>
+      </tbody>
+    </table>
+
+    <h3>Discoveries &amp; surprises, ranked</h3>
     <ol>
-      <li><strong>UB deletes programs, not data</strong> — twice, silently, at -O3.</li>
-      <li><strong>A divisibility property was worth 7&times;</strong> (ragged strips &rarr; memory accumulators).</li>
-      <li><strong>The measured optimum config was one no human proposed</strong>, found via a <em>negative</em>
-        footprint coefficient the solver could see and we couldn't.</li>
-      <li><strong>Identical binaries varied 4.3&times;</strong> across time on shared infra while micro-
-        benchmarks held steady — the missing constraint was someone else's process.</li>
-      <li><strong>gcc quietly performed our hand optimization</strong> (v1&approx;v2), invalidating a diagnosis
-        built on clang's output.</li>
-      <li><strong>The L3 was already doing fusion</strong> — the 10&times; theoretical fusion win was mostly
-        pre-collected by LRU.</li>
-      <li><strong>Standalone kernel benchmarks lied by 4.4&times;</strong> about in-context performance
-        (composition through the frontend). Calibration &ne; context.</li>
-      <li><strong>The math never broke.</strong> Through deleted programs, inliner roulette, VM swaps, and
-        a solver confidently choosing a 3&times; pessimization, relerr sat at ~1e-7 in every
-        single run. Exact reasoning above, empiricism below, hard interface between.</li>
+      <li><strong>UB deletes programs, not data</strong> — twice, silently, at -O3. In v1, <code>load_weights</code>
+        never wrote <code>ln_f_g/b</code>; IPA proved them zero and constant-folded the entire final
+        projection to <code>memset(logits, 0, 40)</code>. In v2, <code>float acc[DP]</code> called with
+        <code>out_dim=FF</code> overflowed the stack; the resulting UB let the compiler delete the loop
+        exit and everything downstream as unreachable, leaving an orphaned infinite loop in the asm.
+        ASan/UBSan belongs in the toolchain, not just the test suite.</li>
+      <li><strong>The measured global optimum was a config no human proposed</strong> — LP-2 found
+        fuse-uv-only via a <em>negative</em> footprint coefficient the solver could see and we couldn't.</li>
+      <li><strong>A single divisibility property was worth 7&times;.</strong> Strips of 112 at
+        od=112/224/448 ran at 36 GF/s; od=128 (112+16 ragged) dropped to 5.3 GF/s. Mixed strip
+        widths defeat register promotion — the accumulator array stays in memory (14 loads + 7
+        FMAs + 7 stores per iteration instead of 7 register FMAs). Strip width must divide every
+        output dimension.</li>
+      <li><strong>Standalone kernel benchmarks lied by 4.4&times;</strong> about in-context performance. The
+        fused kernel ran 61&ndash;65 GF/s standalone and 14 GF/s in context — 8 FMA instructions
+        standalone vs 1,006 in the composed binary, unrolling past the &micro;op cache. Calibration
+        &ne; context.</li>
+      <li><strong>Identical binaries varied 4.3&times;</strong> across time on shared infrastructure while
+        calibration microbenchmarks held steady (98&micro;s &harr; 382&micro;s across windows) — the missing
+        constraint was someone else's process on the same core.</li>
+      <li><strong>gcc quietly performed our hand optimization.</strong> gcc auto-vectorized v1's
+        reductions itself, making v1 &approx; v2 under gcc even though they differ 40% under clang. The
+        "v1 is latency-bound" diagnosis was a property of the compiler, not the source.</li>
+      <li><strong>The L3 cache was already doing implicit temporal fusion.</strong> v3's per-token
+        weight re-streams at D=2048 ran at ~47 GB/s effective — L3 speed, not DRAM — because
+        back-to-back streams of a matrix smaller than L3 hit cache. Expected 10&times; from explicit
+        fusion, measured 1.88&times;; the gap is the cache hierarchy already doing the optimization.</li>
+      <li><strong>Row-form vs. column-form matvec is the whole codegen story.</strong> Dot products
+        give a serial FMA chain plus a 7-instruction horizontal-reduction ladder per output; axpy
+        form gives persistent register accumulators and zero reductions. Reductions across vector
+        lanes are poison; reductions across loop iterations into vector accumulators are free.</li>
+      <li><strong>Inliner roulette:</strong> <code>static inline</code> was honored in one translation unit
+        and ignored in another. Without inlining, no constant propagation, no strip specialization
+        &rarr; 6&times; slower. Use <code>always_inline</code> when correctness-of-performance depends on it.</li>
+      <li><strong>v4 reached the actual memory roofline</strong> — 1.34 GB of weights per pass at
+        ~14 GB/s sustained, the machine's single-core streaming rate. Past that point "more ops
+        through the CPU" is the wrong question; only quantization, batching, or cores move the
+        needle.</li>
+      <li><strong>GPUs lose at this model size.</strong> 30&ndash;50 kernel launches &approx; 200&micro;s vs 87&micro;s
+        on CPU, and PCIe round-trip &approx; the whole computation. GPUs win at &gtrsim;1ms of work per
+        invocation or when the working set wants HBM bandwidth. Tiny latency-critical models belong
+        on a pinned CPU core (or FPGA).</li>
+      <li><strong>The math never broke.</strong> Through deleted programs, inliner roulette, VM swaps,
+        and a solver confidently choosing a 3&times; pessimization, relative error held at ~1e-7 in
+        every single run. Exact reasoning above, empiricism below, hard interface between.</li>
+      <li><strong>Belt and suspenders beats borrowed permission (v6).</strong> Explicit 4-way partial
+        sums in every reduction put the parallelism in the source instead of relying on
+        <code>-ffast-math</code>'s license to reassociate. Same result, but now it's guaranteed by
+        the code, not by a compiler flag someone could remove.</li>
     </ol>
 
-    <h2 id="principles">Operating principles distilled</h2>
+    <h3>Operating principles distilled</h3>
     <ul>
       <li>Algebra first (portable, provable), layout second, schedule last — each layer
         invisible to the tools below it.</li>
@@ -287,6 +390,7 @@
       <a href="tiny_transformer_v2.c">tiny_transformer_v2.c</a>
       <a href="tiny_transformer_v2_fixed.c">tiny_transformer_v2_fixed.c</a>
       <a href="tiny_transformer_v3.c">tiny_transformer_v3.c</a>
+      <a href="v6.c">v6.c</a>
       <a href="bench.c">bench.c</a>
       <a href="scaling.c">scaling.c</a>
       <a href="opt.c">opt.c</a>
@@ -296,8 +400,11 @@
     </p>
     <p>
       <code>tiny_transformer.c</code> is v1 (naive), <code>tiny_transformer_v2.c</code>/<code>tiny_transformer_v3.c</code>
-      are the layout and algebra rewrites. The <code>_fixed</code> variants carry the UB fixes from
-      discoveries&nbsp;2&nbsp;and&nbsp;3 above. <code>bench.c</code> is the 3-way harness with numeric cross-check,
+      are the layout and algebra rewrites. The <code>_fixed</code> variants carry the UB fixes described
+      in the <a href="#appendix">Appendix</a>'s first discovery. <code>v6.c</code> is the current champion —
+      v3's algebra plus OV-through-the-sum, explicit partial reductions, and 512-bit vectorization,
+      cross-checked numerically against v3 since both share the same trained weights.
+      <code>bench.c</code> is the 3-way harness with numeric cross-check,
       <code>scaling.c</code> is the D-sweep, <code>opt.c</code> is the macro-parametrized fusion build (v4 / LP-driven),
       <code>calib.c</code> measures machine constants, and <code>lp.py</code> / <code>lp2.py</code> are the two LP
       iterations described above.

@@ -254,6 +254,20 @@ tbody tr:last-child td { border-bottom: 2px solid var(--fg); }
 .tldr li { margin-bottom: 0.4rem; }
 .tldr p:last-child, .tldr ul:last-child { margin-bottom: 0; }
 
+.chart {
+    margin: 1.4rem 0 0.4rem;
+}
+.chart svg { width: 100%; height: auto; display: block; }
+.chart text { font-family: var(--mono); font-size: 11px; fill: var(--fg-dim); }
+.chart .bar { fill: var(--fg-dim); }
+.chart .bar.highlight { fill: var(--accent); }
+.chart .baseline { stroke: var(--rule); stroke-dasharray: 4 3; stroke-width: 1; }
+.chart-caption {
+    font-size: 0.85rem;
+    color: var(--fg-dim);
+    margin: 0.3rem 0 1.4rem;
+}
+
 blockquote {
     font-style: italic;
     font-size: 1.05rem;
