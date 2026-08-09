@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Optimizing a GPT-2-Class Transformer on a GPU — Martin S. Kristiansen</title>
+  <meta name="description" content="Session notes: taking a GPT-2-small-class transformer from a naive CUDA port at 78ms to a tuned hybrid at 1.60ms on an RTX 3080 Ti — past torch.compile — then batching to 136K tokens/s and turning the method itself into a search program." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=JetBrains+Mono:wght@300;400;500&display=swap" />
+  <link rel="stylesheet" type="text/css" href="../css/main.css" />
+</head>
+<body>
+
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <a class="site-header__name" href="../index.html">Martin S. Kristiansen</a>
+      <nav class="site-nav">
+        <a href="../index.html#about">About</a>
+        <a href="../index.html#writing">Writing</a>
+        <a href="../index.html#projects">Projects</a>
+        <a href="https://github.com/martinsk">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <article>
+    <div class="container">
+      <header>
+        <h1>Optimizing a GPT-2-Class Transformer on a GPU</h1>
+    <hr class="title-rule" />
+    <p class="subtitle">
+      Session notes — GPU microarchitecture, the memory pyramid, and what it actually takes to beat
+      the vendor and the compiler on hardware you own. The sequel to
+      <a href="../llm-cpu-optimization/index.html">the CPU campaign</a>.
+    </p>
+  </header>
+
+  <nav class="toc-strip">
+    <a href="../index.html">Home</a>
+    <a href="#results">Results</a>
+    <a href="#memory">The memory game</a>
+    <a href="#vendor">Racing the vendor</a>
+    <a href="#floors">Floors</a>
+    <a href="#batch">Batch</a>
+    <a href="#search">The search</a>
+    <a href="#method">Method</a>
+    <a href="#appendix">Appendix</a>
+    <a href="#artifacts">Artifacts</a>
+  </nav>
+
+  <main>
+
+    <div class="tldr">
+      <p>
+        <strong>Bottom line:</strong> one GPT-2-small-class transformer (85M params, fp32, seq 128)
+        taken from a naive CUDA port at 78.2ms per forward pass to a tuned hybrid at
+        <strong>1.60ms — 49&times; — on a single RTX 3080 Ti</strong>, in fifteen explicit steps, ending
+        past <code>torch.compile</code>'s 1.72ms on the same workload. Batching then repaid the one
+        factor no kernel could reach, finishing at <strong>136,000 tokens/second</strong> on a $1,000
+        consumer card.
+      </p>
+      <ul>
+        <li><strong>One layout bit was worth 5.3&times;.</strong> Storing the weights transposed —
+          so that consecutive threads read consecutive addresses — was the single largest rung of
+          the entire ladder. The same change on the CPU was worth 1.24&times;.</li>
+        <li><strong>Hand-written kernels beat cuBLAS</strong> — on the narrow shapes. The library won
+          the wide ones. So the fastest binary of the campaign is neither hand-written nor library:
+          it's a <strong>measured routing table between them</strong> (2.27ms).</li>
+        <li><strong>The compiler's entire margin was organizational, not kernel-level.</strong>
+          <code>torch.compile</code>'s lead decomposed into three named tricks — fused epilogues,
+          flash attention, CUDA graph capture — each rebuilt by hand and measured alone. Their sum
+          landed within 0.01ms of the predicted margin, and the result passed the compiler.</li>
+        <li><strong>The last 1.75&times; was never in the code; it was in the question.</strong> A floor
+          analysis split the remaining gap into nameable craft and a "shape tax" no implementation
+          escapes at 128 rows. Batching repaid the tax at exactly the predicted factor.</li>
+        <li><strong>The method itself became a program:</strong> a discrete search with the campaign's
+          priors installed at five distinct ports rediscovered the human-found dispatch table from
+          measurements alone — then named, by regression, the constraint its authors had mispriced
+          all along.</li>
+      </ul>
+    </div>
+
+    <h2 id="results">Results</h2>
+    <p>
+      The <a href="../llm-cpu-optimization/index.html">CPU campaign</a> ended with a tiny
+      transformer certified against the physics of one core. The obvious next question — the one
+      everybody asks about five minutes into any performance conversation — is <em>what about the
+      GPU?</em> So: same discipline, bigger model (GPT-2-small-class, 85M parameters, 340&nbsp;MB of
+      fp32 weights, sequence length 128), and a machine actually worth optimizing for — an RTX
+      3080&nbsp;Ti, which is 80 streaming multiprocessors, ~34&nbsp;TF/s of fp32, and 912&nbsp;GB/s of
+      memory bandwidth, sitting in a desktop.
+    </p>
+    <p>
+      The same model in naive single-core C runs at 1,336ms per forward pass. The naive CUDA port
+      of that exact code is where this ladder starts.
+    </p>
+    <table>
+      <thead>
+        <tr><th>rung</th><th>change</th><th>time</th><th>vs naive port</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>&mdash;</td><td><a href="files/naive_transformer_bench.c">naive C, one CPU core (i9-10850K)</a></td><td>1336&nbsp;ms</td><td>&mdash;</td></tr>
+        <tr><td>1</td><td><a href="files/naive_transformer_cuda.cu">naive CUDA port</a></td><td>78.2&nbsp;ms</td><td>1.00&times;</td></tr>
+        <tr><td>2</td><td><a href="files/naive_transformer_cuda_v2.cu">coalescing (transposed weights)</a></td><td>14.77&nbsp;ms</td><td>5.3&times;</td></tr>
+        <tr><td>3</td><td><a href="files/naive_transformer_cuda_v3.cu">shared-memory tiling</a></td><td>9.08&nbsp;ms</td><td>8.6&times;</td></tr>
+        <tr><td>4</td><td><a href="files/naive_transformer_cuda_v4.cu">register tiling + fused qkv</a></td><td>7.57&nbsp;ms</td><td>10.3&times;</td></tr>
+        <tr><td>5</td><td><a href="files/naive_transformer_cuda_v5.cu">smaller tiles (deliberate falsification)</a></td><td>8.03&nbsp;ms</td><td>null</td></tr>
+        <tr><td>6</td><td><a href="files/naive_transformer_cuda_v6.cu">split-K on the narrow GEMMs</a></td><td>4.48&nbsp;ms</td><td>17.5&times;</td></tr>
+        <tr><td>&mdash;</td><td><em><a href="files/naive_transformer_cuda_oracle.cu">oracle: all GEMMs to cuBLAS (fp32 / TF32)</a></em></td><td><em>3.37 / 2.98&nbsp;ms</em></td><td>&mdash;</td></tr>
+        <tr><td>7</td><td><a href="files/naive_transformer_cuda_v7.cu">parallel attention rebuild</a></td><td>2.91&nbsp;ms</td><td>26.9&times;</td></tr>
+        <tr><td>8</td><td><a href="files/naive_transformer_cuda_v8.cu">SASS-driven fp32 kernel (beats cuBLAS fp32)</a></td><td>2.80&nbsp;ms</td><td>27.9&times;</td></tr>
+        <tr><td>9</td><td><a href="files/naive_transformer_cuda_v9.cu">hand-built tensor cores, WMMA (beats cuBLAS TF32)</a></td><td>2.47&nbsp;ms</td><td>31.7&times;</td></tr>
+        <tr><td>10</td><td><a href="files/naive_transformer_cuda_v10.cu">the CPU campaign's algebra, ported</a></td><td>2.29&nbsp;ms</td><td>34.1&times;</td></tr>
+        <tr><td>11</td><td><a href="files/naive_transformer_cuda_v11.cu">the dispatch table (hand + library, per shape)</a></td><td>2.27&nbsp;ms</td><td>34.5&times;</td></tr>
+        <tr><td>12</td><td><a href="files/naive_transformer_cuda_v12.cu">profiler-guided assault on w2</a></td><td>2.30&nbsp;ms</td><td>null</td></tr>
+        <tr><td>13a</td><td><a href="files/naive_transformer_cuda_v13a.cu">cuBLASLt fused epilogues</a></td><td>2.17&nbsp;ms</td><td>36.0&times;</td></tr>
+        <tr><td>13b</td><td><a href="files/naive_transformer_cuda_v13b.cu">hand-built flash attention</a></td><td>2.03&nbsp;ms</td><td>38.5&times;</td></tr>
+        <tr><td>13c</td><td><a href="files/naive_transformer_cuda_v13c.cu">CUDA graph capture</a></td><td><strong>1.60&nbsp;ms</strong></td><td><strong>48.9&times;</strong></td></tr>
+        <tr><td>14a/b</td><td><a href="files/naive_transformer_cuda_v14a.cu">autotuning tournament</a> / <a href="files/naive_transformer_cuda_v14b.cu">persistent megakernel</a></td><td>1.61 / 1.99&nbsp;ms</td><td>two nulls</td></tr>
+        <tr><td>15</td><td><a href="files/naive_transformer_cuda_v15.cu">batch axis: B sequences per pass</a></td><td>0.94&nbsp;ms/seq</td><td>136K&nbsp;tok/s</td></tr>
+      </tbody>
+    </table>
+    <p class="chart-caption">The full ladder, re-measured back-to-back in one five-minute window;
+      every historical rung reproduced within 1%. Each row links to its source — including the
+      failed experiments, which are part of the record. Reference points: <code>torch.compile
+      max-autotune</code> on the identical workload = 1.72ms; PyTorch eager = 5.6ms.</p>
+
+    <figure>
+      <img src="files/g3_ladder.png" alt="The complete optimization ladder from 78.2ms to 1.60ms" />
+      <p class="chart-caption">The complete ladder. Blue: the hand-written climb. Green:
+        hand-written beating the library. Gold: the cross-vendor dispatch champion. Grey: the
+        informative null.</p>
+    </figure>
+
+    <p>
+      Two house rules carried over from the CPU campaign, because they earned it. First, every
+      version fills its weights from the same seeded random-number generator — deterministic, so
+      all nineteen versions compute on bit-identical weights — and prints its first two output
+      logits: <code>0.095916 0.033000</code>. A timing without that check attached simply
+      does not count as a result. This sounds bureaucratic until you learn it caught six real bugs
+      across nineteen versions, every single one <em>before</em> a wrong conclusion got drawn from a
+      fast-but-broken binary. Second, timings compare only within one measurement window, because
+      the same binary drifts up to 10% with thermal state, and a comparison across windows is a
+      comparison of weather.
+    </p>
+    <p>
+      One law governs everything below. A pass that must execute F floating-point operations and
+      move B bytes at some level of the memory hierarchy cannot finish faster than
+      max(F/peak, B/bandwidth) — the roofline. The interesting part is never the formula; it's
+      which term binds, because that tells you which currency you're paying in, and an optimization
+      that saves the <em>other</em> currency is worth exactly nothing. Most of this write-up is the
+      story of that binding term migrating — from DRAM transactions to L2 bandwidth to warp count
+      to issue slots to launch overhead — until it finally lands somewhere no code can follow.
+    </p>
+
+    <hr />
+
+    <h2 id="memory">Act I — The memory game: 78.2 &rarr; 4.48ms</h2>
+    <p>
+      The naive port is the CPU code transliterated: one thread per output element, each computing
+      its dot product, ~158 kernel launches per pass. It beats the CPU by 16.9&times;, which sounds
+      like success until you ask how a machine with 34&nbsp;TF/s of compute and 912&nbsp;GB/s of
+      bandwidth is spending its time — and the answer is: on neither. 0.8% of compute peak, 0.5% of
+      useful bandwidth. When <em>neither</em> roofline term binds, that absence is itself the
+      diagnosis: the machine is moving roughly 30&times; more bytes than the algorithm asked for,
+      and the excess is pure overhead of <em>how</em> we're asking.
+    </p>
+    <p>
+      Here is the thing to know about GPUs, and it explains most of this act: threads execute in
+      lock-stepped groups of 32 called warps, and when one warp instruction loads memory, the
+      hardware merges the 32 addresses into a single transaction — but only if they're consecutive.
+      In the naive port, each thread walked its own row of the weight matrix, which means at every
+      step the warp's 32 addresses sat 3&nbsp;KB apart. One load became 32 separate transactions,
+      each delivering 4 useful bytes out of the 128 fetched. The fix is embarrassing: store the
+      weights transposed. One layout bit. Nothing else changes.
+    </p>
+
+    <figure>
+      <img src="files/g2_coalesce.png" alt="Coalesced versus uncoalesced memory access patterns" />
+      <p class="chart-caption">Same matrix, same math; the right-hand pattern is one memory
+        transaction per warp instead of thirty-two.</p>
+    </figure>
+
+    <p>
+      That one bit is worth <strong>5.3&times;</strong> — 78.2 down to 14.77ms — and it is the largest
+      single rung of the entire campaign. The comparison worth savoring: the same transposition on
+      the CPU bought 1.24&times;. A CPU spends a huge fraction of its silicon on machinery —
+      out-of-order execution, prefetchers, deep caches — whose whole job is forgiving you for bad
+      memory layouts. The GPU sold all of that machinery and bought lanes with the proceeds. So on
+      a GPU, layout isn't a tuning parameter. It's the game.
+    </p>
+    <p>
+      The next two rungs are the same idea told twice, at successive levels of the memory pyramid:
+      if fetching a value is expensive, arrange to <em>use it more than once</em>. Tiling stages
+      16&times;16 blocks of the matrices into shared memory — the fast on-chip scratchpad — so every
+      fetched element serves 16 multiply-adds (9.08ms). Register tiling then gives each thread a
+      4&times;4 block of accumulators so each shared-memory load serves several of <em>those</em>
+      (7.57ms). If this pattern sounds familiar from the CPU write-up, it should; the reuse theorem
+      doesn't care what machine it runs on, only which level of the pyramid currently hurts.
+    </p>
+    <p>
+      But rung 4's phase profile forked in an interesting way: the wide matrix products got
+      2.2&ndash;2.5&times; faster while the narrow ones got 15&ndash;20% <em>slower</em>. Fatter tiles
+      mean fewer blocks, and the narrow shapes now offered only 48 blocks of work to 80 SMs.
+      Thirty-two processors sat idle, and no cleverness inside a kernel helps a processor that was
+      never given anything to do.
+    </p>
+    <p>
+      The obvious hypothesis — the narrow shapes need more, smaller blocks — got its own rung, and
+      it was <em>wrong</em>, usefully. Smaller tiles produced more blocks but fewer warps per block,
+      and the actual latency-hiding resource (warps in flight) never moved; the version measured
+      slower (8.03ms). One compile, one dead hypothesis, and the surviving explanation was sharp:
+      the parallelism the narrow shapes need does not exist in the output plane at all, because the
+      output plane is fixed. It has to come from the third axis — the summation.
+    </p>
+    <p>
+      That's split-K: carve the long reduction axis across independent block-slices, each writing
+      partial sums, combined by a fixed-order reduction (fixed-order because the logits gate does
+      not accept "deterministic-ish"). The starved GEMM went from 192 warps in flight to 1,536, and
+      from the worst per-FLOP shape in the table to the best — 4.03 down to 1.00ms on that phase
+      alone, 4.48ms overall. Act I ends with the memory hierarchy pacified and a question hanging:
+      how good is this, actually?
+    </p>
+
+    <hr />
+
+    <h2 id="vendor">Act II — Racing the vendor: 4.48 &rarr; 2.27ms</h2>
+    <p>
+      Before spending more effort, price the ceiling. Route every matrix product to cuBLAS —
+      NVIDIA's own library, decades of engineering, all the tactics — not as an optimization but as
+      a <em>pricing instrument</em>. Two numbers came back. The library led our hand GEMMs by
+      1.45&times;, which mostly says "keep going, there's headroom." And the tensor cores — the
+      dedicated matrix hardware, the thing the marketing slides say is 4&times; — bought
+      <strong>1.22&times;</strong>. Not because the slides lie, exactly, but because tensor cores
+      raise the <em>compute</em> ceiling, and our small-batch shapes were nowhere near the old
+      ceiling. Raising a roof nobody is touching buys very little. This deflation is the roofline
+      doing its job, and it recurs everywhere in modern inference: the hardware's headline number
+      assumes shapes fat enough to be compute-bound, and yours mostly aren't.
+    </p>
+    <p>
+      Meanwhile the phase profiler — the instrument that picked every rung in this campaign — was
+      pointing at attention, which had been quietly running rung-1 code the whole time, including a
+      softmax whose max and sum were computed by <em>one thread</em> while 100,000 others waited.
+      Rebuilding it with this act's own toolkit (coalesced warp-per-position score dots, parallel
+      shuffle-tree reductions) took attention from 0.98 to 0.42ms. 2.91ms, and now the GEMMs are
+      the biggest phase again — except this time they're at library speed. To beat the library, you
+      have to find out what your compiler actually did to you.
+    </p>
+    <p>
+      So: disassemble the binary and count. The GPU's real machine code is called SASS, and
+      <code>cuobjdump</code> will show it to you, and the count came back damning — 256 FMA
+      instructions escorted by 175 integer instructions doing bounds checks and address arithmetic.
+      Nearly half the issue slots doing bookkeeping instead of math, a bottleneck completely
+      invisible to FLOP and byte accounting. Three fixes, all at the C++ level: hoist the bounds
+      checks (all real shapes are exact tile multiples, so the hot path can carry zero predicates),
+      stage in 16-byte <code>float4</code> loads, and double-buffer with <code>cp.async</code> so
+      the next tile streams in while the current one computes. The instruction count predicted
+      ~1.5&times;; the measurement said 1.56&times; — the campaign's best prediction, and worth
+      dwelling on, because across the whole campaign predictions made from SASS counts went
+      2-for-2 while predictions made from intuition went roughly 2-for-11. <strong>The result:
+      7% faster than cuBLAS fp32, zero library calls.</strong>
+    </p>
+    <p>
+      The tensor-core version of the same question (rung 9) swaps the register micro-tiles for
+      warp-level WMMA fragments — hundreds of FLOPs per issued instruction, the issue-density war
+      won by hardware — and lands at parity-plus with cuBLAS-TF32. But look at <em>where</em> each
+      side wins, because that's the punchline of the whole act:
+    </p>
+
+    <figure>
+      <img src="files/g8_versus.png" alt="Hand-written kernels versus cuBLAS, per GEMM shape" />
+      <p class="chart-caption">The twin verdicts. The library wins the wide shapes; the hand
+        kernels win the narrow ones. Specialization beats generality at fixed shapes; generality
+        beats specialization everywhere else.</p>
+    </figure>
+
+    <p>
+      Rung 10 imports the CPU campaign's real lesson: the only optimizations that survive a change
+      of machine are the ones that are <em>true</em> — algebra, not scheduling. Layernorm's scale
+      and shift feed only linear maps, so they fold into adjacent weights offline; bias, relu, and
+      residual adds move inside the GEMM's store instead of being their own kernels; and since only
+      the final token's logits are ever read, the last layer runs one row instead of 128 — while
+      its keys and values stay full, because attention needs the whole prefix. That asymmetry, by
+      the way, <em>is</em> the KV cache. Both campaigns now have independently rediscovered
+      production inference's central data structure by doing dead-code elimination the compiler
+      can't see. 2.29ms, and — a nice touch — the numerical drift <em>improved</em>, because folds
+      computed offline in double precision replaced a runtime fp32 pass.
+    </p>
+    <p>
+      Which brings us to the champion, and the champion is not a kernel. Nobody wins everywhere:
+      the library takes the wide shapes, the hand-built split-K tensor-core kernels take the narrow
+      ones, a dedicated GEMV takes the one-row sites. Route each shape to its measured winner and
+      you get <strong>2.27ms — 34.5&times; within the GPU, 590&times; the CPU baseline</strong>. The
+      fastest binary of the campaign is a routing table. If that feels like an anticlimax, consider
+      that TensorRT and cuDNN are, at enormous scale, exactly this: time the candidates per shape,
+      cache the winner. Rung 11 is the two-row artisanal version.
+    </p>
+    <p>
+      One more rung belongs to this act, precisely because it failed. The last expensive phase got
+      a full profiler-guided assault — strength-reduced addressing, doubled tile depth, a
+      three-stage pipeline — and nothing moved. The clinching detail: a briefly-broken build that
+      computed NaN through half-staged tiles ran in <em>exactly the same time</em>. When a kernel's
+      duration is invariant to its instruction content, the instructions were never the problem;
+      the shape itself sets the price, and cuBLAS's version of the same phase (paying the same
+      toll) confirmed it. Hold that thought — the campaign eventually sends this tax a bill it can
+      actually pay. (And yes, the logits gate caught the NaN before any conclusion was drawn.
+      That's two of the campaign's code-generation bugs caught by the same boring check.)
+    </p>
+
+    <hr />
+
+    <h2 id="floors">Act III — Floors, and the ecosystem verdict: 2.27 &rarr; 1.60ms</h2>
+    <p>
+      At this point in any optimization campaign you owe yourself an honest answer to "how much is
+      left?" — otherwise you're just polishing indefinitely. Summing per-phase roofline floors puts
+      the physics of this workload at ~0.87ms against the champion's 2.27, and the 2.6&times; gap
+      splits into two substances that deserve different responses. About 1.4&times; is
+      <em>craft</em>, with named line items: layernorm paying launch latency, attention re-reading
+      K and V, split-K's partial-sum traffic. Fixable, with known techniques, priced in advance.
+      The remaining ~1.5&ndash;1.8&times; is the <em>shape tax</em> — at 128 rows, tensor-core tiles
+      run under-filled and pipelines never reach depth, and rung 12 just demonstrated no kernel
+      escapes it. You exit that tax only by changing the question. Both halves of this decomposition
+      get tested below, which is what makes it more than an excuse.
+    </p>
+
+    <figure>
+      <img src="files/g9_floor.png" alt="v11 measured time against per-phase roofline floors" />
+      <p class="chart-caption">The champion against its per-phase floors. Knowing where the
+        boundary between craft and shape lies — in milliseconds, itemized — is what a floor is
+        for.</p>
+    </figure>
+
+    <p>
+      First, though, the question everyone actually cares about: how does two months of hand-tuned
+      CUDA stack up against <code>import torch</code>? The reference is HuggingFace GPT-2 small —
+      architecturally identical to the benchmark — on the same card. PyTorch eager: 5.6ms, and
+      here's the beautiful part — eager fp32, TF32, and fp16 all time <em>identically</em>. Read
+      that again: precision doesn't matter, on a workload that is nominally arithmetic. That's a
+      controlled experiment proving the default stack is bound by Python dispatch and ~150 unfused
+      kernel launches, not by math. Then <code>torch.compile max-autotune</code>, the ecosystem's
+      best shot: <strong>1.72ms — dead center in the band the floor analysis had predicted</strong>
+      for exactly the features it implements. A floor analysis that forecasts a competitor's result
+      before meeting it is a floor analysis worth keeping.
+    </p>
+
+    <figure>
+      <img src="files/g10_ecosystem.png" alt="Six implementations of the same workload compared" />
+      <p class="chart-caption">Six contestants, one workload. At the 2ms scale, the milliseconds
+        live between the kernels, not inside them.</p>
+    </figure>
+
+    <p>
+      Better still, the compiler showed its work: its autotune logs listed its per-shape kernel
+      timings, and read closely they said two things. Its Triton-generated GEMMs tied ours. And its
+      cuBLAS fallback entries were <em>losing</em> the narrow shapes by 1.5&times; — the library
+      losing exactly where our hand kernels had beaten it, independently confirmed by the
+      competition's own logs. The compiler's entire 0.55ms lead was organizational: <em>they fused
+      the graph; we had fused kernels.</em>
+    </p>
+    <p>
+      So the endgame is attribution: rebuild the compiler's margin one named trick at a time, with
+      our binary as the control group. Fused epilogues via cuBLASLt — the bias/relu kernels the
+      library dispatch had reintroduced disappear again — 2.17ms. Hand-built flash attention — K
+      and V stream through shared memory in tiles serving a whole query block, softmax computed
+      <em>online</em> with a running max, no score matrix ever touching global memory — attention
+      0.40 to 0.25ms, wall 2.03. And CUDA graph capture — record the pass's ~80 launches once,
+      replay as a single graph, kernels untouched — <strong>1.60ms</strong>. That last one was the
+      biggest of the three, which is its own lesson: the launch tax was ~0.4ms, a fifth of the
+      wall, for <em>doing nothing</em>, twice what theory priced it at.
+    </p>
+    <p>
+      The accounting at the close is almost suspicious: predicted margin ~0.67ms across three
+      tricks; banked, 0.09 + 0.14 + 0.43 = 0.66ms. Every individual estimate was wrong — epilogues
+      overpriced, graphs underpriced by 2&times; — and the sum landed within 0.01ms anyway, the
+      portfolio redeeming the errors of its parts. <strong>Final standing: 1.60ms, past
+      torch.compile's 1.72, with every byte still ours.</strong>
+    </p>
+    <p>
+      Two epilogue experiments both returned null, and both earned their keep. An explicit
+      16-candidate tournament over cuBLASLt's algorithm choices changed nothing — the heuristic was
+      already picking the winner, which is worth knowing. And the persistent megakernel — the
+      entire 12-layer pass as <em>one</em> cooperative kernel, ~111 grid-wide syncs, the frontier's
+      favorite party trick — lost as forecast (1.99ms), with the interesting number sitting in the
+      launch banner: 2 blocks per SM instead of 4. A merged kernel runs the <em>whole pass</em> at
+      its worst phase's register footprint; one kernel means one resource high-water mark. That,
+      quantified, is why the people who ship megakernels pair them with library-class in-house
+      GEMMs and per-phase resource budgets, and why you probably shouldn't.
+    </p>
+
+    <hr />
+
+    <h2 id="batch">Act IV — Changing the question: 136K tokens/second</h2>
+    <p>
+      The floor analysis left one factor on the table — the 1.5&ndash;1.8&times; shape tax — and named
+      its own exit: batch. Stack B sequences and every token GEMM runs at 128&middot;B rows while
+      the weights stream from DRAM <em>once</em> regardless; the under-filled tiles fill. Built on
+      the champion, with the correctness gate strengthened to match: all B sequences get identical
+      inputs, so all B outputs must match the reference <em>and</em> each other, bitwise — any
+      cross-sequence leak in the batched attention shows up immediately.
+    </p>
+
+    <figure>
+      <img src="files/g11_batch.png" alt="Batch scaling: per-sequence cost and total throughput" />
+      <p class="chart-caption">The measured frontier. Per-sequence cost falls 1.65 &rarr; 0.94ms
+        with the knee at B=8; throughput plateaus at 136K tokens/s = 23.4&nbsp;TF/s, 69% of the
+        card's gated peak sustained across a full transformer.</p>
+    </figure>
+
+    <p>
+      The number that closes the campaign: the plateau's 23.4&nbsp;TF/s over batch-1's 13.4 is
+      <strong>1.75&times; — dead center in the shape-tax band</strong>. Two independent experiments,
+      one subtractive (rung 12 failing to code the tax away) and one additive (batch repaying it),
+      agreeing on the same number is about as close to proof as performance work gets. And note the
+      quietly absurd endpoint: at full load, a sequence costs <em>less</em> machine time (0.94ms)
+      than the dedicated single-sequence champion (1.60ms). The last factor was never in the code.
+      It was in the question.
+    </p>
+
+    <hr />
+
+    <h2 id="search">Act V — From campaign to program</h2>
+    <p>
+      Step back far enough and the whole ladder is a walk through a parameter space — tile shapes,
+      pipeline depths, split factors, vendor-or-hand — plus, above all of that, a handful of
+      algebraic rewrites. Which invites an uncomfortable question: could a program have done this?
+      Not by gradient descent — every variable is discrete, and the landscape is made of cliffs we
+      personally fell off (occupancy halving at a shared-memory threshold, wave counts stepping at
+      multiples of 80; a finite-difference gradient on this terrain points at noise between
+      cliffs). The right frame is an ordinary search loop — <em>propose candidates, predict their
+      cost, pick one, measure it, repeat</em> — and the campaign's actual contribution is knowing
+      <strong>where in that loop the hard-won knowledge plugs in</strong>. There are four such
+      ports, plus a fifth left empty on purpose:
+    </p>
+
+    <div class="chart">
+      <svg viewBox="0 0 760 530" role="img" aria-label="The search loop with five ports where prior knowledge installs">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#888888"></path>
+          </marker>
+        </defs>
+
+        <!-- port annotations (outside the loop) -->
+        <text x="70" y="46" font-weight="500">PORT 1 &middot; the space</text>
+        <text x="70" y="62">physics as hard constraints;</text>
+        <text x="70" y="76">enumerate only the resource knees</text>
+
+        <text x="500" y="46" font-weight="500">PORT 3 &middot; the model</text>
+        <text x="500" y="62">the roofline is the guess;</text>
+        <text x="500" y="76">a regression learns only its errors</text>
+
+        <text x="500" y="368" font-weight="500">PORT 4 &middot; the choice</text>
+        <text x="500" y="384">favor the informative experiment</text>
+        <text x="500" y="398">over the merely promising one</text>
+
+        <text x="70" y="368" font-weight="500">PORT 2 &middot; the score</text>
+        <text x="70" y="384">distance from the floor, paired,</text>
+        <text x="70" y="398">same window; 1.0 means stop</text>
+
+        <!-- injection arrows from annotations into stations -->
+        <line x1="150" y1="82" x2="150" y2="106" stroke="#888888" stroke-width="1.2" marker-end="url(#arrow)"></line>
+        <line x1="580" y1="82" x2="580" y2="106" stroke="#888888" stroke-width="1.2" marker-end="url(#arrow)"></line>
+        <line x1="580" y1="358" x2="580" y2="334" stroke="#888888" stroke-width="1.2" marker-end="url(#arrow)"></line>
+        <line x1="150" y1="358" x2="150" y2="334" stroke="#888888" stroke-width="1.2" marker-end="url(#arrow)"></line>
+
+        <!-- the four stations -->
+        <rect x="70" y="108" width="200" height="58" fill="none" stroke="#111111" stroke-width="1.4" rx="3"></rect>
+        <text x="170" y="133" text-anchor="middle" font-weight="500" fill="#111111">PROPOSE</text>
+        <text x="170" y="150" text-anchor="middle">candidate configurations</text>
+
+        <rect x="490" y="108" width="200" height="58" fill="none" stroke="#111111" stroke-width="1.4" rx="3"></rect>
+        <text x="590" y="133" text-anchor="middle" font-weight="500" fill="#111111">PREDICT</text>
+        <text x="590" y="150" text-anchor="middle">each candidate's cost</text>
+
+        <rect x="490" y="276" width="200" height="58" fill="none" stroke="#111111" stroke-width="1.4" rx="3"></rect>
+        <text x="590" y="301" text-anchor="middle" font-weight="500" fill="#111111">PICK</text>
+        <text x="590" y="318" text-anchor="middle">the next experiment</text>
+
+        <rect x="70" y="276" width="200" height="58" fill="none" stroke="#111111" stroke-width="1.4" rx="3"></rect>
+        <text x="170" y="301" text-anchor="middle" font-weight="500" fill="#111111">MEASURE</text>
+        <text x="170" y="318" text-anchor="middle">against the incumbent</text>
+
+        <!-- loop arrows -->
+        <line x1="272" y1="137" x2="486" y2="137" stroke="#888888" stroke-width="1.4" marker-end="url(#arrow)"></line>
+        <line x1="590" y1="168" x2="590" y2="272" stroke="#888888" stroke-width="1.4" marker-end="url(#arrow)"></line>
+        <line x1="488" y1="305" x2="274" y2="305" stroke="#888888" stroke-width="1.4" marker-end="url(#arrow)"></line>
+        <line x1="170" y1="274" x2="170" y2="170" stroke="#888888" stroke-width="1.4" marker-end="url(#arrow)"></line>
+        <text x="182" y="226">repeat; surprises</text>
+        <text x="182" y="240">update the model</text>
+
+        <!-- port 5, outside the loop -->
+        <rect x="215" y="428" width="330" height="76" fill="none" stroke="#7a0000" stroke-width="1.4" stroke-dasharray="6 4" rx="3"></rect>
+        <text x="380" y="452" text-anchor="middle" font-weight="500" fill="#7a0000">PORT 5 &middot; semantic rewrites (empty)</text>
+        <text x="380" y="469" text-anchor="middle">folding, pruning, flash attention &mdash;</text>
+        <text x="380" y="486" text-anchor="middle">no sweep can reach what a program means</text>
+        <line x1="380" y1="426" x2="380" y2="400" stroke="#7a0000" stroke-width="1.2" stroke-dasharray="6 4"></line>
+        <line x1="380" y1="376" x2="380" y2="342" stroke="#7a0000" stroke-width="1.2" stroke-dasharray="6 4"></line>
+        <text x="380" y="396" text-anchor="middle" font-size="20" font-weight="500" fill="#7a0000">&#10005;</text>
+      </svg>
+    </div>
+    <p class="chart-caption">The search loop, and where the campaign's knowledge plugs in. The
+      design rule: install each prior at a falsifiability level matching your confidence — laws as
+      constraints, regularities as generators, beliefs as predictions the measurements can
+      convict. A prior hard-coded at the wrong tier is how a model becomes confidently,
+      unfalsifiably wrong.</p>
+
+    <ul>
+      <li><strong>Port 1 — what may be proposed.</strong> Physical laws become hard constraints
+        (shared memory budgets, tile divisibility), and the known cliff locations become the menu:
+        instead of sweeping every value, enumerate only the resource knees. This is what collapsed
+        a ~10<sup>12</sup> joint space to ~50 candidates per site.</li>
+      <li><strong>Port 3 — how cost is predicted.</strong> Don't learn a cost model from zero; use
+        the roofline-with-penalties model as the default prediction and let a regression on
+        physical features (occupancy, waves, tile fill) learn only its <em>errors</em>. The payoff:
+        when the residual has structure, that structure is a missing constraint with a name.</li>
+      <li><strong>Port 4 — which experiment to run next.</strong> Prefer candidates the model is
+        uncertain about, not just ones it likes — the falsification habit from rungs 5 and 12,
+        given a formal home. Cheap analytic pruning happens before the stopwatch is paid.</li>
+      <li><strong>Port 2 — how a result is scored.</strong> Not raw milliseconds but distance from
+        the physical floor — comparable across shapes and machines, and it gives the search
+        something no raw-time objective has: a stopping rule (efficiency &rarr; 1 means done).
+        Candidate and incumbent always measured paired, in one window.</li>
+      <li><strong>Port 5 — left deliberately empty.</strong> No parameter sweep contains layernorm
+        folding or flash attention, because those aren't settings — they're rewrites that change
+        what the program <em>means</em>. The system marks this port as a hook and searches only the
+        other four. That boundary is the experiment: how far do the first four ports get you?</li>
+    </ul>
+
+    <p>
+      What happened when it ran is the best part of the campaign. In ~40 paired measurements the
+      search kept the vendor on both wide shapes and went hand-built split-K on the narrow ones —
+      rung 11's dispatch structure, re-derived from scratch by a program. Then it convicted its own
+      w2 pick: the selection rule had compared candidates against a stale incumbent number from an
+      earlier, warmer window. Measurement was paired; selection was not — the same-window doctrine,
+      violated one line after being enforced, caught by the system's own closing check. At larger
+      budget its table converged to the champion's dispatch <em>cell for cell</em>, and its residual
+      report explained what had slowed it down: <code>split, coef &minus;0.14, model
+      OVERprices</code> — the hand-set split penalty had made the winning config look pessimistic.
+      The machine, naming by regression the constraint family its authors had been mispricing since
+      rung 12. A replication run reproduced the coefficient to the third digit.
+    </p>
+    <p>
+      And one last lesson, earned the honest way. The search's one genuinely new finding — split
+      factor 8 instead of 4 on the wo GEMM — was adopted into the champion as a one-constant
+      change, and the champion did not move. Was the finding even real? The definitive test is a
+      <em>paired ablation</em>: run both configurations side by side, inside the same measurement
+      window, and look only at the difference. Deliberately, the final chart of this campaign is
+      about the smallest number in it:
+    </p>
+
+    <figure>
+      <img src="files/g13_paired.png" alt="Paired ablation: absolute times swing with thermals, the paired difference holds" />
+      <p class="chart-caption">The two configurations timed across four measurement windows. The
+        machine's thermal state moves <em>both</em> lines by 15% — but the gap between them holds
+        at ~0.010ms in every window. When the noise is bigger than the effect, only the
+        within-window difference means anything.</p>
+    </figure>
+
+    <p>
+      The corpus eventually grew to ~20 windows, every difference positive, closing the true
+      effect at 0.009 &plusmn; 0.002ms: real, replicated, statistically airtight — and one-eighth
+      the size of the story initially told about it. Which is the campaign's closing rule in one
+      line: direction from the search, magnitude from the pairs, narration from no one.
+    </p>
+
+    <hr />
+
+    <h2 id="method">Method — in six sentences</h2>
+    <ol>
+      <li><strong>Verify the function before timing it:</strong> the logits gate caught six real bugs
+        across nineteen versions — none by luck, none after a wrong conclusion.</li>
+      <li><strong>Compare only within one window;</strong> the machine's state is part of every
+        measurement.</li>
+      <li><strong>Attribute before optimizing:</strong> the phase table chose every rung and finished
+        7-for-7; advance intuition finished roughly 2-for-13 on magnitudes.</li>
+      <li><strong>Read what the machine actually built</strong> (<code>cuobjdump</code>), and when
+        prediction and measurement disagree, the disagreement is the next experiment.</li>
+      <li><strong>Optimizations are reuse schemes climbing one memory pyramid;</strong> mathematics
+        outranks all of them; and every fix promotes a new bottleneck — the campaign ends not when
+        ideas run out but when the binding constraint becomes a property of the question rather
+        than the code.</li>
+      <li><strong>When the method becomes a program, it inherits the discipline but not the
+        judgment:</strong> it will find true things whose size only the paired ablation can
+        state.</li>
+    </ol>
+
+    <hr />
+
+    <h2 id="appendix">Appendix — discoveries &amp; surprises, ranked</h2>
+    <ol>
+      <li><strong>The naive port's diagnosis was that nothing bound.</strong> 0.8% of compute, 0.5% of
+        bandwidth — when neither roofline term is the ceiling, the machine is moving bytes the
+        algorithm never asked for. The absence of a bottleneck is itself a bottleneck report.</li>
+      <li><strong>One layout bit: 5.3&times; on GPU, 1.24&times; on CPU.</strong> The cleanest
+        hardware-shapes-software measurement of both campaigns. The CPU spends silicon forgiving
+        bad access patterns; the GPU spent that silicon on lanes.</li>
+      <li><strong>Tensor cores bought 1.22&times;, not 4&times;.</strong> Headline numbers assume
+        compute-bound shapes; at 128 rows the workload never touched the old roof. Also, consumer
+        GA102 gates the TF32 rate below the datacenter parts' — measure, never datasheet (the CPU
+        campaign's rule, reconfirmed).</li>
+      <li><strong>A broken kernel timed identically to a correct one</strong> (rung 12) — the
+        strongest possible statement that the shape, not the instruction stream, set the price.
+        The 1.75&times; batch result later confirmed the tax's size independently.</li>
+      <li><strong>The fastest binary is a routing table.</strong> Hand kernels won narrow shapes,
+        cuBLAS won wide ones, symmetrically. Neither side dominating is not a tie — it's a
+        dispatch opportunity.</li>
+      <li><strong>SASS counting beat intuition 2-for-2 vs 2-for-11.</strong> Issue-slot accounting —
+        what fraction of instructions do mathematics — is invisible to FLOP and byte counts, and
+        it predicted rung 8's 1.56&times; almost exactly.</li>
+      <li><strong>torch.compile's margin was zero kernels.</strong> Its Triton kernels tied ours; its
+        entire 0.55ms lead was graph organization — and its own autotune logs confirmed our
+        hand-beats-library finding on the narrow shapes.</li>
+      <li><strong>The megakernel's price has a name:</strong> one kernel, one register high-water
+        mark. Merging the whole pass halved occupancy because the worst phase's footprint taxed
+        every phase.</li>
+      <li><strong>Last-token pruning is the KV cache</strong>, rediscovered as dead-code elimination
+        no compiler can see — for the second campaign in a row.</li>
+      <li><strong>The search convicted its own selection bug</strong> — comparing against a stale
+        incumbent from a warmer window — with the same closing check that caught the human bugs.
+        The discipline transferred; the judgment (sizing the finding) still needed the paired
+        ablation.</li>
+    </ol>
+
+    <hr />
+
+    <h2 id="artifacts">Artifacts</h2>
+    <p class="links">
+      <a href="files/naive_transformer_bench.c">CPU baseline</a>
+      <a href="files/naive_transformer_cuda_oracle.cu">cuBLAS oracle</a>
+      <a href="files/v16_kernels.cu">v16_kernels.cu</a>
+      <a href="files/v16_search.py">v16_search.py</a>
+    </p>
+    <p>
+      The CUDA ladder itself is linked rung by rung from the <a href="#results">results table</a>,
+      failed experiments included. Every file is self-contained: fills identical weights from the
+      same seeded generator, prints its own logits gate (reference
+      <code>0.095916 0.033000</code>). Canonical build:
+      <code>nvcc -O3 -arch=sm_86 -DPROFILE=1 file.cu [-lcublas]</code>.
+      <code>naive_transformer_bench.c</code> is the single-core CPU baseline (1336ms);
+      <code>_oracle.cu</code> routes all GEMMs to cuBLAS (<code>-DTF32</code> for tensor cores);
+      <code>v16_kernels.cu</code> / <code>v16_search.py</code> are the five-port search system.
+    </p>
+
+  </main>
+
+    </div>
+  </article>
+
+  <footer>
+    <div class="container">
+      <p>&copy; 2026 Martin S. Kristiansen</p>
+    </div>
+  </footer>
+
+</body>
+</html>

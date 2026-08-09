@@ -1,7 +1,5 @@
 /*----------------------------------------------------------------------------*
  * martinsk.github.io — editorial profile theme                                *
- * Inspired by Sequoia Capital people pages: generous whitespace, serif          *
- * display type, small-caps sans labels, and a single quiet accent.              *
  *----------------------------------------------------------------------------*/
 
 :root {
@@ -278,13 +276,24 @@ img { max-width: 100%; height: auto; display: block; }
 
 .project {
     display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 1rem;
-    padding: 1.25rem 0;
+    grid-template-columns: 200px 1fr auto;
+    gap: 1.5rem;
+    align-items: start;
+    padding: 1.5rem 0;
     border-bottom: 1px solid var(--rule);
 }
 
 .project:first-of-type { border-top: 1px solid var(--rule); }
+
+.project__thumb {
+    width: 200px;
+    aspect-ratio: 8 / 5;
+    object-fit: cover;
+    object-position: top center;
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    background: var(--bg-soft);
+}
 
 .project__info { min-width: 0; }
 
@@ -303,7 +312,8 @@ img { max-width: 100%; height: auto; display: block; }
 
 .project__links {
     display: flex;
-    gap: 1rem;
+    flex-direction: column;
+    gap: 0.5rem;
     align-items: flex-start;
     font-family: var(--sans);
     font-size: 0.78rem;
@@ -320,14 +330,34 @@ img { max-width: 100%; height: auto; display: block; }
 
 .project__links a:hover { color: var(--accent); }
 
-@media (max-width: 640px) {
+@media (max-width: 860px) {
     .project {
-        grid-template-columns: 1fr;
-        gap: 0.75rem;
+        grid-template-columns: 140px 1fr;
+        grid-template-areas:
+            "thumb info"
+            "links links";
+        gap: 1rem 1.25rem;
     }
+    .project__thumb { grid-area: thumb; width: 140px; }
+    .project__info { grid-area: info; }
     .project__links {
+        grid-area: links;
+        flex-direction: row;
+        gap: 1rem;
         margin-top: 0;
     }
+}
+
+@media (max-width: 560px) {
+    .project {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "thumb"
+            "info"
+            "links";
+        gap: 0.75rem;
+    }
+    .project__thumb { width: 100%; }
 }
 
 /*----------------------------------------------------------------------------*
@@ -515,11 +545,14 @@ article h3 {
 }
 
 .tldr p { margin-bottom: 0.6rem; }
-.tldr ul { margin: 0.4rem 0 0; }
-.tldr li { margin-bottom: 0.4rem; }
+.tldr ul { margin: 0.4rem 0 0; list-style: none; padding-left: 0; }
+.tldr li { margin-bottom: 0.55rem; }
 .tldr p:last-child, .tldr ul:last-child { margin-bottom: 0; }
 
 .chart { margin: 1.4rem 0 0.4rem; }
+figure { margin: 1.4rem 0 0.4rem; }
+figure img { width: 100%; border: 1px solid var(--rule); }
+figure .chart-caption { margin-top: 0.5rem; }
 .chart svg { width: 100%; height: auto; display: block; }
 .chart text { font-family: var(--mono); font-size: 11px; fill: var(--fg-muted); }
 .chart .bar { fill: var(--fg-muted); }
