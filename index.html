@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Martin S. Kristiansen</title>
-  <meta name="description" content="Martin S. Kristiansen — I build fast databases, small languages, and the tools around them. Mostly in C, often compiled to WebAssembly." />
+  <meta name="description" content="Martin S. Kristiansen — I lead engineering teams and build the systems myself: fast databases, small languages, and the tools around them, mostly in C." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=JetBrains+Mono:wght@300;400;500&display=swap" />
@@ -12,115 +12,181 @@
 </head>
 <body>
 
-  <header>
-    <h1>Martin S. Kristiansen</h1>
-    <hr class="title-rule" />
-    <p class="subtitle">
-      I build fast databases, small languages, and the tools around them —
-      mostly in C, often compiled to WebAssembly.
-    </p>
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <a class="site-header__name" href="index.html">Martin S. Kristiansen</a>
+      <nav class="site-nav">
+        <a href="#about">About</a>
+        <a href="#writing">Writing</a>
+        <a href="#projects">Projects</a>
+        <a href="https://github.com/martinsk">GitHub</a>
+      </nav>
+    </div>
   </header>
 
-  <nav class="toc-strip">
-    <a href="#projects">Projects</a>
-    <a href="#notes">Notes</a>
-    <a href="https://github.com/martinsk">GitHub</a>
-    <a href="https://www.linkedin.com/in/martinskristiansen">LinkedIn</a>
-  </nav>
+  <main class="container">
 
-  <main>
-    <h2 id="projects">Projects</h2>
-
-    <section class="project">
-      <div class="project-head">
-        <h2>mskql</h2>
-        <span class="label">in-memory SQL</span>
+    <section class="hero">
+      <div class="hero__grid">
+        <img class="hero__image" src="assets/4F226E20-346D-400B-9492-4749747FB2A6_1_105_c.jpeg" alt="Martin S. Kristiansen" />
+        <div class="hero__content">
+          <h1 class="hero__title">Martin S. Kristiansen</h1>
+          <span class="hero__role">Systems &amp; Languages</span>
+          <ul class="hero__social">
+            <li><a href="https://github.com/martinsk">GitHub</a></li>
+            <li><a href="https://www.linkedin.com/in/martinskristiansen">LinkedIn</a></li>
+          </ul>
+          <blockquote class="hero__quote">
+            I lead engineering teams and build the systems myself — fast databases,
+            small languages, and the tools around them, mostly in C.
+          </blockquote>
+        </div>
       </div>
-      <p class="tagline">
-        An in-memory analytics database that speaks the PostgreSQL wire protocol.
-      </p>
-      <p>Analytical queries return in single-digit milliseconds — ~97K queries/second versus PostgreSQL's 508 on concurrent load, and 20&times; faster on aggregates. Beats DuckDB on aggregates, joins, CTEs, and writes. Connect with <code>psql</code>, pgAdmin, or any PostgreSQL driver on port 5433.</p>
-      <p>Bit-identical to PostgreSQL across 1,514 adversarial test cases. Query Parquet files directly with <code>CREATE FOREIGN TABLE</code> — no ETL. Native <code>VECTOR(n)</code> column type. Compiles to WebAssembly and runs entirely in the browser.</p>
-      <p class="links">
-        <a href="https://mskql.com">mskql.com&nbsp;&rarr;</a>
-        <a href="https://github.com/martinsk/mskql">source</a>
-        <a href="https://mskql.com/bench-vs-pg.html">benchmarks</a>
-      </p>
     </section>
 
-    <section class="project">
-      <div class="project-head">
-        <h2>&mu;</h2>
-        <span class="label">array language</span>
+    <section class="section" id="about">
+      <p class="section__header">Backstory</p>
+      <div class="section__body">
+        <p>
+          I'm an engineering leader and systems builder — Director of Engineering at Amazon and
+          Twitch, CTO of Mova AI, and a multiple-time founder. I studied computer science at
+          Aarhus University, with published research in HMM optimization, and I still learn the
+          same way I did back then: by building — databases, languages, ML systems.
+        </p>
+        <p>
+          I care about performance as a consequence of clarity. When the data structures and the
+          control flow are right, the program usually ends up fast anyway. WebAssembly has become
+          a favorite target because it forces the same discipline: no giant runtime, no hidden
+          allocations, just the code that needs to run. I run teams the same way I write
+          software: small, fast, minimal ceremony.
+        </p>
       </div>
-      <p class="tagline">
-        A minimal array language in the tradition of APL and K — ~1,000 lines of C, no dynamic memory allocation.
-      </p>
-      <p>Expressions evaluate right-to-left using single-character verbs and higher-order adverbs (fold <code>/</code>, scan <code>\</code>). Element-wise operations, lambdas, and functional composition work out of the box.</p>
-      <p>Ships with built-in statistics, financial functions (Black-Scholes, Markowitz portfolio optimization, volatility-smile calibration), CSV parsing, and SVG/canvas plotting. Compiles to WebAssembly — runs entirely in the browser.</p>
-      <p class="links">
-        <a href="https://martinsk.github.io/mu/">try it&nbsp;&rarr;</a>
-        <a href="https://github.com/martinsk/mu">source</a>
-      </p>
     </section>
 
-    <section class="project">
-      <div class="project-head">
-        <h2>FreshQL</h2>
-        <span class="label">web platform &middot; 2024</span>
+    <section class="section" id="focus">
+      <p class="section__header">On the lookout for</p>
+      <div class="section__body">
+        <ul>
+          <li>Fast, simple systems software — query engines, languages, and storage.</li>
+          <li>Minimal abstractions that compose without surprising you later.</li>
+          <li>WebAssembly as a real deployment target, not just a demo.</li>
+          <li>Tools that remove accidental complexity from building and running software.</li>
+        </ul>
       </div>
-      <p class="tagline">
-        An in-memory key-value store with an HTTP templating engine built in — 10&times; the speed of Redis.
-      </p>
-      <p>Templates bind directly to URL parameters and live database values; store an HTML template at a path and it serves instantly — no separate web layer, no JS framework. Written in C; its storage engine is the direct predecessor of mskql.</p>
-      <p class="links">
-        <a href="https://freshql.ai">freshql.ai&nbsp;&rarr;</a>
-        <a href="https://freshql.ai/blog.html">blog</a>
-      </p>
     </section>
 
-    <section class="project">
-      <div class="project-head">
-        <h2>tickle</h2>
-        <span class="label">ML &middot; trading</span>
+    <section class="section" id="writing">
+      <p class="section__header">Writing</p>
+      <div class="writing-grid">
+        <a class="card" href="llm-cpu-optimization/index.html">
+          <p class="card__meta">Notes</p>
+          <h3 class="card__title">Optimizing a Tiny Transformer on CPU</h3>
+          <p class="card__summary">Algebraic rewrites, fusion, and an LP solver that beat human tuning — 2.44&times; end-to-end.</p>
+        </a>
+        <a class="card" href="financial_markets/index.html">
+          <p class="card__meta">Notes</p>
+          <h3 class="card__title">Understanding Financial Markets</h3>
+          <p class="card__summary">Kelly sizing, Markowitz portfolios, and related ideas.</p>
+        </a>
+        <a class="card" href="programming/index.html">
+          <p class="card__meta">Reference</p>
+          <h3 class="card__title">Writing a Webserver in C</h3>
+          <p class="card__summary">A minimal, event-driven receive loop built on <code>poll(2)</code>.</p>
+        </a>
       </div>
-      <p class="tagline">
-        A JEPA-based system for stock price prediction — learns joint embeddings rather than exact prices, making it robust to market noise.
-      </p>
-      <p>Processes 1-minute OHLCV data with 30-tick context windows and 20 input features (price + technical indicators). Predicts log-returns with uncertainty estimates for Kelly-inspired position sizing. Achieved +1.32% return on AMZN with 43.9% win rate.</p>
-      <p class="links">
-        <a href="https://martinsk.github.io/tickle">demo&nbsp;&rarr;</a>
-      </p>
     </section>
 
-    <section class="project">
-      <div class="project-head">
-        <h2>tau</h2>
-        <span class="label">desktop editor</span>
+    <section class="section" id="projects">
+      <p class="section__header">Projects</p>
+
+      <div class="project">
+        <div class="project__info">
+          <h3 class="project__name">mskql</h3>
+          <p class="project__desc">
+            An in-memory analytics database that speaks the PostgreSQL wire protocol.
+            Analytical queries return in single-digit milliseconds — ~97K queries/second versus
+            PostgreSQL's 508 on concurrent load, and 20&times; faster on aggregates. Connect with
+            <code>psql</code>, pgAdmin, or any PostgreSQL driver.
+          </p>
+        </div>
+        <div class="project__links">
+          <a href="https://mskql.com">site</a>
+          <a href="https://github.com/martinsk/mskql">source</a>
+          <a href="https://mskql.com/bench-vs-pg.html">benchmarks</a>
+        </div>
       </div>
-      <p class="tagline">
-        A proof-of-concept desktop code editor built to explore what an editor with a coding agent built in could look like.
-      </p>
-      <p>Browse a project in a sidebar explorer, open files in tabs and split panes, and edit with Monaco (syntax highlighting, LSP support). Run shell tasks in a built-in terminal panel, and stage, commit, and view diffs with built-in git support. Run a coding agent like Claude Code in a dedicated panel.</p>
-      <p class="links">
-        <a href="https://martinsk.github.io/tau/">try it&nbsp;&rarr;</a>
-        <a href="https://github.com/martinsk/tau">source</a>
-      </p>
+
+      <div class="project">
+        <div class="project__info">
+          <h3 class="project__name">&mu;</h3>
+          <p class="project__desc">
+            A minimal array language in the tradition of APL and K — ~1,000 lines of C, no
+            dynamic memory allocation. Right-to-left evaluation with single-character verbs and
+            higher-order adverbs. Ships with statistics, financial functions, CSV parsing, and
+            SVG/canvas plotting. Runs entirely in the browser via WebAssembly.
+          </p>
+        </div>
+        <div class="project__links">
+          <a href="https://martinsk.github.io/mu/">try it</a>
+          <a href="https://github.com/martinsk/mu">source</a>
+        </div>
+      </div>
+
+      <div class="project">
+        <div class="project__info">
+          <h3 class="project__name">FreshQL</h3>
+          <p class="project__desc">
+            An in-memory key-value store with an HTTP templating engine built in — 10&times; the
+            speed of Redis. Templates bind directly to URL parameters and live database values;
+            store an HTML template at a path and it serves instantly. Written in C; the storage
+            engine is the direct predecessor of mskql.
+          </p>
+        </div>
+        <div class="project__links">
+          <a href="https://freshql.ai/blog.html">site</a>
+        </div>
+      </div>
+
+      <div class="project">
+        <div class="project__info">
+          <h3 class="project__name">tickle</h3>
+          <p class="project__desc">
+            A JEPA-based system for stock price prediction — learns joint embeddings rather than
+            exact prices, making it robust to market noise. Processes 1-minute OHLCV data with
+            30-tick context windows and 20 input features. Predicts log-returns with uncertainty
+            estimates and sizes positions with a Kelly-inspired rule, so correctly-sized bets pay
+            off even below a 50% hit rate — on an AMZN backtest, the strategy returned +1.32%
+            despite a 43.9% win rate.
+          </p>
+        </div>
+        <div class="project__links">
+          <a href="https://martinsk.github.io/tickle">demo</a>
+        </div>
+      </div>
+
+      <div class="project">
+        <div class="project__info">
+          <h3 class="project__name">tau</h3>
+          <p class="project__desc">
+            A proof-of-concept desktop code editor built to explore what an editor with a coding
+            agent built in could look like. Browse a project in a sidebar, open files in tabs and
+            split panes, edit with Monaco, run shell tasks in a built-in terminal, and drive git
+            operations without leaving the app.
+          </p>
+        </div>
+        <div class="project__links">
+          <a href="https://martinsk.github.io/tau/">try it</a>
+          <a href="https://github.com/martinsk/tau">source</a>
+        </div>
+      </div>
     </section>
 
-    <hr />
-
-    <h2 id="notes">Notes</h2>
-    <ul>
-      <li><a href="llm-cpu-optimization/index.html">Optimizing a Tiny Transformer on CPU</a> — algebraic rewrites, fusion, and an LP solver that beat human tuning, 2.44&times; end-to-end.</li>
-      <li><a href="financial_markets/index.html">Understanding Financial Markets</a> — Kelly sizing, Markowitz portfolios, and related ideas.</li>
-      <li><a href="programming/index.html">Writing a Webserver in C</a> — an event-driven server built on <code>poll(2)</code>.</li>
-    </ul>
   </main>
 
   <footer>
-    <a href="https://github.com/martinsk">github.com/martinsk</a>
-    <a href="https://www.linkedin.com/in/martinskristiansen">LinkedIn</a>
+    <div class="container">
+      <p>&copy; 2026 Martin S. Kristiansen</p>
+    </div>
   </footer>
 
 </body>

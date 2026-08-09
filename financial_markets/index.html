@@ -6,7 +6,7 @@
 <!-- 2025-01-11 Sat 15:51 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Financial Markets</title>
+<title>Understanding Financial Markets — Martin S. Kristiansen</title>
 <meta name="generator" content="Org Mode" />
 <style>
   #content { max-width: 60em; margin: auto; }
@@ -180,8 +180,6 @@
     margin: 10px;
     background: #ffffcc;
   }
-  #org-div-home-and-up
-   { text-align: right; font-size: 70%; white-space: nowrap; }
   textarea { overflow-x: auto; }
   .linenr { font-size: smaller }
   .code-highlighted { background-color: #ffff00; }
@@ -227,12 +225,18 @@
 </script>
 </head>
 <body>
-<div id="org-div-home-and-up">
- <a accesskey="h" href="../index.html"> UP </a>
- |
- <a accesskey="H" href="../index.html"> HOME </a>
-</div><div id="content" class="content">
-<h1 class="title">Financial Markets</h1>
+<header class="site-header">
+  <div class="container site-header__inner">
+    <a class="site-header__name" href="../index.html">Martin S. Kristiansen</a>
+    <nav class="site-nav">
+      <a href="../index.html#about">About</a>
+      <a href="../index.html#writing">Writing</a>
+      <a href="../index.html#projects">Projects</a>
+      <a href="https://github.com/martinsk">GitHub</a>
+    </nav>
+  </div>
+</header><div id="content" class="content">
+<h1 class="title">Understanding Financial Markets</h1>
 
 <div id="outline-container-orgd3bc3d9" class="outline-2">
 <h2 id="orgd3bc3d9">Fundamentals</h2>
@@ -242,7 +246,7 @@
 <h3 id="org0fa5b14">Ideas:</h3>
 <div class="outline-text-3" id="text-org0fa5b14">
 <ul class="org-ul">
-<li>Kelly Criteria/Merton Share for sizeing bets</li>
+<li>Kelly Criteria/Merton Share for sizing bets</li>
 </ul>
 
 \begin{equation}
@@ -271,7 +275,7 @@ In general this works for \(n\) risky assets with respective normally distribute
 
 
 <ul class="org-ul">
-<li>The above math generatlizes to log normal distributions:</li>
+<li>The above math generalizes to log-normal distributions:</li>
 </ul>
 \begin{align}
     r_{(1..n)} &= \sum_{i \in (1..n)}{x_i r_i}  \\
@@ -306,23 +310,23 @@ do not gain improving results as time spent
 increases.  <a href="https://arxiv.org/pdf/2411.15114">https://arxiv.org/pdf/2411.15114</a></li>
 
 <li>Portfolio Diversification and Supporting Financial
-Institutions(Harry Markowitz). Yale Class on Optimizing
-portfolio compositions to reduce risk exposure and hence optimizing
-risk return.  <a href="https://www.youtube.com/watch?v=_B_24GUWdSM">https://www.youtube.com/watch?v=_B_24GUWdSM</a></li>
+Institutions (Harry Markowitz). Yale class on optimizing
+portfolio compositions to reduce risk exposure and hence optimize
+risk-adjusted return.  <a href="https://www.youtube.com/watch?v=_B_24GUWdSM">https://www.youtube.com/watch?v=_B_24GUWdSM</a></li>
 
 <li>The Kelly criterion: How to size bets.  A really nice
-interactive representation of the kelly Criterie for determining
+interactive representation of the Kelly criterion for determining
 optimal bet sizes when considering a bet with positive expected
 outcome.  <a href="https://explore.paulbutler.org/bet/">https://explore.paulbutler.org/bet/</a></li>
 
-<li>Merton's portfolio Problem.  Explains how to use a
-statical approach similar to Kelly, but based on knowledge of the
+<li>Merton's Portfolio Problem.  Explains how to use a
+statistical approach similar to Kelly, but based on knowledge of the
 statistical distribution in a continuous form.
  <a href="https://en.wikipedia.org/wiki/Merton%27s_portfolio_problem">https://en.wikipedia.org/wiki/Merton%27s_portfolio_problem</a></li>
 
-<li>Tactical Investment Algorithms(Marcos López de
-Prado).  [Not read] The idea of this paper is to construct a
-properbalistic model of the world, and test strategies against this
+<li>Tactical Investment Algorithms (Marcos López de
+Prado).  The idea of this paper is to construct a
+probabilistic model of the world, and test strategies against this
 model. We then test the real world against the model to determine if
 we expect our strategies to work.
  <a href="https://caia.org/sites/default/files/tactical.pdf">https://caia.org/sites/default/files/tactical.pdf</a></li>

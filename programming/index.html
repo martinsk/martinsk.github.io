@@ -6,7 +6,7 @@
 <!-- 2025-01-11 Sat 17:47 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>C Webserver</title>
+<title>Writing a Webserver in C — Martin S. Kristiansen</title>
 <meta name="generator" content="Org Mode" />
 <style>
   #content { max-width: 60em; margin: auto; }
@@ -180,8 +180,6 @@
     margin: 10px;
     background: #ffffcc;
   }
-  #org-div-home-and-up
-   { text-align: right; font-size: 70%; white-space: nowrap; }
   textarea { overflow-x: auto; }
   .linenr { font-size: smaller }
   .code-highlighted { background-color: #ffff00; }
@@ -195,18 +193,25 @@
 <link rel="stylesheet" type="text/css" href="../css/main.css" />
 </head>
 <body>
-<div id="org-div-home-and-up">
- <a accesskey="h" href="../index.html"> UP </a>
- |
- <a accesskey="H" href="../index.html"> HOME </a>
-</div><div id="content" class="content">
-<h1 class="title">C Webserver</h1>
+<header class="site-header">
+  <div class="container site-header__inner">
+    <a class="site-header__name" href="../index.html">Martin S. Kristiansen</a>
+    <nav class="site-nav">
+      <a href="../index.html#about">About</a>
+      <a href="../index.html#writing">Writing</a>
+      <a href="../index.html#projects">Projects</a>
+      <a href="https://github.com/martinsk">GitHub</a>
+    </nav>
+  </div>
+</header><div id="content" class="content">
+<h1 class="title">Writing a Webserver in C</h1>
+<p class="subtitle">Reference implementation — the core <code>poll(2)</code> event loop behind a small C webserver, kept minimal for clarity.</p>
 
 <div id="outline-container-org9f7df89" class="outline-2">
-<h2 id="org9f7df89">Writing a webserver in C</h2>
+<h2 id="org9f7df89">The main receive loop</h2>
 <div class="outline-text-2" id="text-org9f7df89">
 <p>
-The fundamentals of writting a webserver in C is the main receive loop:
+Writing a webserver in C comes down to this loop: one <code>poll(2)</code> call per iteration, dispatching on which file descriptors are ready. It's deliberately stripped of buffering and parsing detail — those live in the surrounding source, not in this excerpt.
 </p>
 
 
@@ -238,7 +243,7 @@ The fundamentals of writting a webserver in C is the main receive loop:
     <span style="color: #6a9955;">// Ask the OS for updates on the fd's</span>
     <span style="color: #569cd6;">int</span> <span style="color: #9cdcfe;">n_ready_fds</span> <span style="color: #d4d4d4; background-color: #1e1e1e;">=</span> <span style="color: #dcdcaa;">poll</span><span style="color: #d4d4d4; background-color: #1e1e1e;">(</span>fds<span style="color: #d4d4d4; background-color: #1e1e1e;">,</span> nfds<span style="color: #d4d4d4; background-color: #1e1e1e;">,</span> <span style="color: #b5cea8;">-1</span><span style="color: #d4d4d4; background-color: #1e1e1e;">)</span><span style="color: #d4d4d4; background-color: #1e1e1e;">;</span>
 
-    <span style="color: #6a9955;">// Go over the fd's and check if there are recieved events</span>
+    <span style="color: #6a9955;">// Go over the fd's and check if there are received events</span>
     <span style="color: #569cd6;">for</span> <span style="color: #d4d4d4; background-color: #1e1e1e;">(</span><span style="color: #569cd6;">int</span> <span style="color: #9cdcfe;">i</span> <span style="color: #d4d4d4; background-color: #1e1e1e;">=</span> <span style="color: #b5cea8;">0</span><span style="color: #d4d4d4; background-color: #1e1e1e;">;</span> i <span style="color: #d4d4d4; background-color: #1e1e1e;">!=</span> nfds<span style="color: #d4d4d4; background-color: #1e1e1e;">;</span> <span style="color: #9cdcfe;">i</span><span style="color: #d4d4d4; background-color: #1e1e1e;">++</span><span style="color: #d4d4d4; background-color: #1e1e1e;">)</span> <span style="color: #d4d4d4; background-color: #1e1e1e;">{</span>
 
       <span style="color: #6a9955;">// check if there are updates on the serverfd</span>
@@ -252,7 +257,7 @@ The fundamentals of writting a webserver in C is the main receive loop:
           <span style="color: #569cd6;">int</span> <span style="color: #9cdcfe;">connfd</span> <span style="color: #d4d4d4; background-color: #1e1e1e;">=</span> <span style="color: #dcdcaa;">accept</span><span style="color: #d4d4d4; background-color: #1e1e1e;">(</span>httpfd<span style="color: #d4d4d4; background-color: #1e1e1e;">,</span> <span style="color: #d4d4d4; background-color: #1e1e1e;">(</span><span style="color: #569cd6;">struct</span> <span style="color: #4ec9b0;">sockaddr</span> <span style="color: #d4d4d4; background-color: #1e1e1e;">*</span><span style="color: #d4d4d4; background-color: #1e1e1e;">)</span><span style="color: #d4d4d4; background-color: #1e1e1e;">&amp;</span>cli<span style="color: #d4d4d4; background-color: #1e1e1e;">,</span> <span style="color: #d4d4d4; background-color: #1e1e1e;">&amp;</span>len<span style="color: #d4d4d4; background-color: #1e1e1e;">)</span><span style="color: #d4d4d4; background-color: #1e1e1e;">;</span>
 
           <span style="color: #569cd6;">if</span> <span style="color: #d4d4d4; background-color: #1e1e1e;">(</span>connfd <span style="color: #d4d4d4; background-color: #1e1e1e;">&lt;</span> <span style="color: #b5cea8;">0</span><span style="color: #d4d4d4; background-color: #1e1e1e;">)</span> <span style="color: #d4d4d4; background-color: #1e1e1e;">{</span>
-            <span style="color: #dcdcaa;">fprintf</span><span style="color: #d4d4d4; background-color: #1e1e1e;">(</span>stderr<span style="color: #d4d4d4; background-color: #1e1e1e;">,</span> <span style="color: #ce9178;">"FAILURE: recieved errorcode on accept call"</span><span style="color: #d4d4d4; background-color: #1e1e1e;">)</span><span style="color: #d4d4d4; background-color: #1e1e1e;">;</span>
+            <span style="color: #dcdcaa;">fprintf</span><span style="color: #d4d4d4; background-color: #1e1e1e;">(</span>stderr<span style="color: #d4d4d4; background-color: #1e1e1e;">,</span> <span style="color: #ce9178;">"FAILURE: received errorcode on accept call"</span><span style="color: #d4d4d4; background-color: #1e1e1e;">)</span><span style="color: #d4d4d4; background-color: #1e1e1e;">;</span>
             <span style="color: #dcdcaa;">fprintf</span><span style="color: #d4d4d4; background-color: #1e1e1e;">(</span>stderr<span style="color: #d4d4d4; background-color: #1e1e1e;">,</span> <span style="color: #ce9178;">"Error message: %s\n"</span><span style="color: #d4d4d4; background-color: #1e1e1e;">,</span> <span style="color: #dcdcaa;">strerror</span><span style="color: #d4d4d4; background-color: #1e1e1e;">(</span>errno<span style="color: #d4d4d4; background-color: #1e1e1e;">))</span><span style="color: #d4d4d4; background-color: #1e1e1e;">;</span>
           <span style="color: #d4d4d4; background-color: #1e1e1e;">}</span> <span style="color: #569cd6;">else</span> <span style="color: #d4d4d4; background-color: #1e1e1e;">{</span>
             <span style="color: #6a9955;">// initialize the client and add it to the list of fd's</span>
@@ -262,7 +267,7 @@ The fundamentals of writting a webserver in C is the main receive loop:
         <span style="color: #d4d4d4; background-color: #1e1e1e;">}</span>
       <span style="color: #d4d4d4; background-color: #1e1e1e;">}</span> <span style="color: #569cd6;">else</span> <span style="color: #569cd6;">if</span> <span style="color: #d4d4d4; background-color: #1e1e1e;">(</span>fds<span style="color: #d4d4d4; background-color: #1e1e1e;">[</span>i<span style="color: #d4d4d4; background-color: #1e1e1e;">]</span><span style="color: #d4d4d4; background-color: #1e1e1e;">.</span><span style="color: #4ec9b0; font-style: italic;">revents</span> <span style="color: #d4d4d4; background-color: #1e1e1e;">&amp;</span> <span style="color: #4ec9b0;">POLLHUP</span><span style="color: #d4d4d4; background-color: #1e1e1e;">)</span> <span style="color: #d4d4d4; background-color: #1e1e1e;">{</span>
 
-        <span style="color: #6a9955;">// if connection is showdown </span>
+        <span style="color: #6a9955;">// if connection is shut down</span>
         <span style="color: #dcdcaa;">shutdown</span><span style="color: #d4d4d4; background-color: #1e1e1e;">(</span>fds<span style="color: #d4d4d4; background-color: #1e1e1e;">[</span>i<span style="color: #d4d4d4; background-color: #1e1e1e;">]</span><span style="color: #d4d4d4; background-color: #1e1e1e;">.</span><span style="color: #4ec9b0; font-style: italic;">fd</span><span style="color: #d4d4d4; background-color: #1e1e1e;">,</span> <span style="color: #4ec9b0;">SHUT_RDWR</span><span style="color: #d4d4d4; background-color: #1e1e1e;">)</span><span style="color: #d4d4d4; background-color: #1e1e1e;">;</span>
         <span style="color: #dcdcaa;">close</span><span style="color: #d4d4d4; background-color: #1e1e1e;">(</span>fds<span style="color: #d4d4d4; background-color: #1e1e1e;">[</span>i<span style="color: #d4d4d4; background-color: #1e1e1e;">]</span><span style="color: #d4d4d4; background-color: #1e1e1e;">.</span><span style="color: #4ec9b0; font-style: italic;">fd</span><span style="color: #d4d4d4; background-color: #1e1e1e;">)</span><span style="color: #d4d4d4; background-color: #1e1e1e;">;</span>
 

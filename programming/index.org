@@ -1,16 +1,15 @@
-#+TITLE: C Webserver 
+#+TITLE: Writing a Webserver in C
 #+AUTHOR: Martin Kristiansen
 #+OPTIONS: toc:nil num:nil author:nil
 #+OPTIONS: tex:t
 #+STARTUP: nofold
 #+HTML_HEAD: <link rel="stylesheet" type="text/css" href="../css/main.css" />
-#+HTML_LINK_UP: ../index.html
-#+HTML_LINK_HOME: ../index.html
+#+HTML: <header class="site-header"><div class="container site-header__inner"><a class="site-header__name" href="../index.html">Martin S. Kristiansen</a><nav class="site-nav"><a href="../index.html#about">About</a><a href="../index.html#writing">Writing</a><a href="../index.html#projects">Projects</a><a href="https://github.com/martinsk">GitHub</a></nav></div></header>
+#+HTML: <p class="subtitle">Reference implementation — the core <code>poll(2)</code> event loop behind a small C webserver, kept minimal for clarity.</p>
 
-* Writing a webserver in C
+* The main receive loop
 
-
-The fundamentals of writting a webserver in C is the main receive loop:
+Writing a webserver in C comes down to this loop: one =poll(2)= call per iteration, dispatching on which file descriptors are ready. It's deliberately stripped of buffering and parsing detail — those live in the surrounding source, not in this excerpt.
 
 
 #+BEGIN_SRC C
@@ -41,7 +40,7 @@ The fundamentals of writting a webserver in C is the main receive loop:
       // Ask the OS for updates on the fd's
       int n_ready_fds = poll(fds, nfds, -1);
 
-      // Go over the fd's and check if there are recieved events
+      // Go over the fd's and check if there are received events
       for (int i = 0; i != nfds; i++) {
 
 	// check if there are updates on the serverfd
@@ -55,7 +54,7 @@ The fundamentals of writting a webserver in C is the main receive loop:
 	    int connfd = accept(httpfd, (struct sockaddr *)&cli, &len);
 
 	    if (connfd < 0) {
-	      fprintf(stderr, "FAILURE: recieved errorcode on accept call");
+	      fprintf(stderr, "FAILURE: received errorcode on accept call");
 	      fprintf(stderr, "Error message: %s\n", strerror(errno));
 	    } else {
 	      // initialize the client and add it to the list of fd's
@@ -65,7 +64,7 @@ The fundamentals of writting a webserver in C is the main receive loop:
 	  }
 	} else if (fds[i].revents & POLLHUP) {
 
-	  // if connection is showdown 
+	  // if connection is shut down
 	  shutdown(fds[i].fd, SHUT_RDWR);
 	  close(fds[i].fd);
 
