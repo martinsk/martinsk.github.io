@@ -247,6 +247,25 @@ img { max-width: 100%; height: auto; display: block; }
 
 .card:hover .card__title { color: var(--accent); }
 
+.card--featured {
+    grid-column: 1 / -1;
+    border-left: 3px solid var(--accent);
+    background: var(--bg-soft);
+    padding: 1.75rem 2rem;
+}
+
+.card--featured .card__meta { color: var(--accent); }
+
+.card--featured .card__title {
+    font-size: 1.6rem;
+    margin-bottom: 0.6rem;
+}
+
+.card--featured .card__summary {
+    font-size: 1.05rem;
+    max-width: 46rem;
+}
+
 .card__meta {
     font-family: var(--sans);
     font-size: 0.65rem;
