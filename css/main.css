@@ -572,6 +572,12 @@ article h3 {
 figure { margin: 1.4rem 0 0.4rem; }
 figure img { width: 100%; border: 1px solid var(--rule); }
 figure .chart-caption { margin-top: 0.5rem; }
+figcaption {
+    font-size: 0.85rem;
+    color: var(--fg-muted);
+    margin: 0.5rem 0 1.4rem;
+}
+.figure-number { display: none; }
 .chart svg { width: 100%; height: auto; display: block; }
 .chart text { font-family: var(--mono); font-size: 11px; fill: var(--fg-muted); }
 .chart .bar { fill: var(--fg-muted); }
@@ -628,6 +634,14 @@ pre.src code, pre.example code {
 
 pre.src::before { color: #888; background: inherit; }
 pre.src .linenr { color: #777; user-select: none; }
+
+/* Syntax highlighting — classes emitted by htmlize during the org build */
+pre.src .org-keyword, pre.src .org-builtin, pre.src .org-preprocessor { color: #569cd6; }
+pre.src .org-type, pre.src .org-constant { color: #4ec9b0; }
+pre.src .org-function-name { color: #dcdcaa; }
+pre.src .org-variable-name { color: #9cdcfe; }
+pre.src .org-string { color: #ce9178; }
+pre.src .org-comment, pre.src .org-comment-delimiter, pre.src .org-doc { color: #6a9955; }
 
 #postamble, #footnotes {
     margin-top: 2.5rem;
